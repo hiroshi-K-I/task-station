@@ -614,10 +614,16 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
 </div>
 
 <script>
-/* ===== db.js ===== */
+/* ===================================================================
+ * TaskDB — IndexedDB ラッパー
+ * DB名: TaskStationDB (バージョン1)
+ * オブジェクトストア: boards / columns / tasks
+ * すべての操作を Promise でラップし async/await で利用可能にする
+ * =================================================================== */
 class TaskDB {
   constructor() { this.db = null; }
 
+  /** DBを開く。初回は3つのオブジェクトストアを作成する */
   async init() {
     this.db = await new Promise((resolve, reject) => {
       const req = indexedDB.open('TaskStationDB', 1);
@@ -638,6 +644,7 @@ class TaskDB {
     });
   }
 
+  /** 指定ストアの全レコードを配列で返す */
   async getAll(store) {
     return new Promise((resolve, reject) => {
       const req = this.db.transaction(store, 'readonly').objectStore(store).getAll();
@@ -646,6 +653,7 @@ class TaskDB {
     });
   }
 
+  /** 1件を upsert (id が同じなら上書き) */
   async put(store, data) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(store, 'readwrite');
@@ -655,6 +663,7 @@ class TaskDB {
     });
   }
 
+  /** id で1件削除 */
   async delete(store, id) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(store, 'readwrite');
@@ -664,6 +673,7 @@ class TaskDB {
     });
   }
 
+  /** 複数件を1トランザクションで一括 upsert */
   async putMany(store, items) {
     if (!items || !items.length) return;
     return new Promise((resolve, reject) => {
@@ -676,7 +686,11 @@ class TaskDB {
   }
 }
 
-/* ===== store.js ===== */
+/* ===================================================================
+ * Store — アプリケーション状態管理 + CRUD + アンドゥ
+ * pub/sub パターン (on/emit) で UI レイヤーに変更を通知する
+ * アンドゥ履歴は最大20件 (Command パターン)
+ * =================================================================== */
 class Store {
   constructor(db) {
     this.db = db;
@@ -685,39 +699,47 @@ class Store {
       currentBoardId: null,
       selectedTaskId: null,
       focusedColumnId: null,
+      // ビュー状態は localStorage で永続化し、リロード後も維持
       view: localStorage.getItem('lastView') || 'kanban',
-      calYear: parseInt(localStorage.getItem('calYear')) || new Date().getFullYear(),
+      calYear:  parseInt(localStorage.getItem('calYear'))  || new Date().getFullYear(),
       calMonth: parseInt(localStorage.getItem('calMonth')) || (new Date().getMonth() + 1),
     };
     this._listeners = {};
-    this._history = [];
+    this._history = [];  // アンドゥ用コマンド履歴
   }
 
+  /** イベントを購読する。返り値は購読解除関数 */
   on(event, cb) {
     (this._listeners[event] = this._listeners[event] || []).push(cb);
     return () => { this._listeners[event] = this._listeners[event].filter(x => x !== cb); };
   }
 
+  /** イベントを発火して全リスナーを呼び出す */
   emit(event, data) { (this._listeners[event] || []).forEach(cb => cb(data)); }
 
+  /** 現在開いているボードを返す */
   get board() { return this.state.boards.find(b => b.id === this.state.currentBoardId); }
 
+  /** 現在のボードのカラム一覧を columnOrder 順に返す */
   get columns() {
     if (!this.board) return [];
     return this.board.columnOrder.map(id => this.state.columns.find(c => c.id === id)).filter(Boolean);
   }
 
+  /** 指定カラムのタスク一覧を taskOrder 順に返す */
   getColumnTasks(columnId) {
     const col = this.state.columns.find(c => c.id === columnId);
     if (!col) return [];
     return col.taskOrder.map(id => this.state.tasks.find(t => t.id === id)).filter(Boolean);
   }
 
+  /** 現在のボードに属する全タスクを返す */
   getAllTasks() {
     const colIds = new Set(this.columns.map(c => c.id));
     return this.state.tasks.filter(t => colIds.has(t.columnId));
   }
 
+  /** DB から全データを読み込み、ボードがなければデフォルトを作成する */
   async loadAll() {
     [this.state.boards, this.state.columns, this.state.tasks] = await Promise.all([
       this.db.getAll('boards'), this.db.getAll('columns'), this.db.getAll('tasks'),
@@ -727,6 +749,7 @@ class Store {
     this.emit('loaded');
   }
 
+  /** 初回起動時にデフォルトボードとサンプルタスクを作成する */
   async _createDefaultBoard() {
     const boardId = crypto.randomUUID();
     const now = Date.now();
@@ -759,21 +782,26 @@ class Store {
     await this.db.putMany('columns', columns);
   }
 
+  /** 次の金曜日正午のタイムスタンプを返す (今日が金曜なら翌週金曜) */
   _nextFriday() {
     const today = new Date();
     const dow = today.getDay();
-    const daysUntil = dow === 5 ? 7 : (5 - dow + 7) % 7 || 7;
+    // 今日が金曜(5)なら7日後、それ以外は次の金曜まで計算
+    // (5 - dow + 7) % 7 は dow=5 のとき 0 になるが、ternary で先に 7 を返すので到達しない
+    const daysUntil = dow === 5 ? 7 : (5 - dow + 7) % 7;
     const fri = new Date(today);
     fri.setDate(today.getDate() + daysUntil);
     fri.setHours(12, 0, 0, 0);
     return fri.getTime();
   }
 
+  /** アンドゥ用コマンドを履歴に積む (最大20件でFIFO) */
   _pushHistory(action) {
     this._history.push(action);
     if (this._history.length > 20) this._history.shift();
   }
 
+  /** 最後の操作を取り消す */
   async undo() {
     const action = this._history.pop();
     if (!action) return;
@@ -781,6 +809,7 @@ class Store {
     this.emit('changed');
   }
 
+  /** タスクを作成して DB に保存する */
   async createTask(columnId, data) {
     const now = Date.now();
     const task = { id: crypto.randomUUID(), columnId, title: data.title || 'New Task', description: data.description || '', priority: data.priority || 'none', tags: [], links: data.links || [], attachments: data.attachments || [], dueDate: data.dueDate ?? null, createdAt: now, updatedAt: now };
@@ -793,6 +822,7 @@ class Store {
     return task;
   }
 
+  /** タスクのフィールドを更新して DB に保存する */
   async updateTask(taskId, updates) {
     const task = this.state.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -804,6 +834,7 @@ class Store {
     return task;
   }
 
+  /** タスクを削除して DB からも消す */
   async deleteTask(taskId) {
     const task = this.state.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -817,6 +848,7 @@ class Store {
     this.emit('changed');
   }
 
+  /** タスクを別カラム・別インデックスへ移動する */
   async moveTask(taskId, toColumnId, toIndex) {
     const task = this.state.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -838,6 +870,7 @@ class Store {
     this.emit('changed');
   }
 
+  /** カラムを新規作成する */
   async createColumn(name = '新しいカラム') {
     const col = { id: crypto.randomUUID(), boardId: this.state.currentBoardId, name, color: '#6366f1', wipLimit: null, taskOrder: [] };
     this.state.columns.push(col);
@@ -847,6 +880,7 @@ class Store {
     return col;
   }
 
+  /** カラムのフィールドを更新する */
   async updateColumn(colId, updates) {
     const col = this.state.columns.find(c => c.id === colId);
     if (!col) return;
@@ -855,6 +889,7 @@ class Store {
     this.emit('changed');
   }
 
+  /** カラムと配下のタスクをすべて削除する */
   async deleteColumn(colId) {
     const col = this.state.columns.find(c => c.id === colId);
     if (!col) return;
@@ -865,24 +900,36 @@ class Store {
     this.emit('changed');
   }
 
+  /** 表示ビューを切り替えて localStorage に保存する */
   setView(view) { this.state.view = view; localStorage.setItem('lastView', view); this.emit('viewChanged', view); }
+
+  /** カレンダーの表示月を変更して localStorage に保存する */
   setCalendarNav(year, month) { this.state.calYear = year; this.state.calMonth = month; localStorage.setItem('calYear', String(year)); localStorage.setItem('calMonth', String(month)); this.emit('calNavChanged'); }
+
+  /** タスクの選択状態を変更する (null で解除) */
   selectTask(taskId) { this.state.selectedTaskId = taskId; this.emit('selectionChanged', taskId); }
+
+  /** キーボードフォーカス中のカラムを設定する */
   focusColumn(colId) { this.state.focusedColumnId = colId; this.emit('focusChanged', colId); }
 }
 
-/* ===== board.js ===== */
+/* ===================================================================
+ * BoardView — カンバンビューのレンダリング
+ * カラムとタスクカードを DOM に描画する
+ * =================================================================== */
 class BoardView {
   constructor(store) {
     this.store = store;
     this.container = document.getElementById('columns-container');
   }
 
+  /** 全カラムを再描画する */
   render() {
     this.container.innerHTML = '';
     this.store.columns.forEach(col => this.container.appendChild(this._renderColumn(col)));
   }
 
+  /** カラム要素を生成して返す */
   _renderColumn(col) {
     const tasks = this.store.getColumnTasks(col.id);
     const el = document.createElement('div');
@@ -892,8 +939,10 @@ class BoardView {
     const wipLabel = col.wipLimit
       ? `<span class="wip-badge ${tasks.length >= col.wipLimit ? 'wip-over' : ''}">${tasks.length}/${col.wipLimit}</span>`
       : `<span class="task-count">${tasks.length}</span>`;
+    // XSS対策: ユーザー入力のカラム色は hex 形式のみ許可し、不正値はデフォルト色にフォールバック
+    const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
     el.innerHTML = `
-      <div class="col-header" style="border-top: 3px solid ${col.color}">
+      <div class="col-header" style="border-top: 3px solid ${safeColor}">
         <span class="col-name" contenteditable spellcheck="false">${this._esc(col.name)}</span>
         <div class="col-header-right">${wipLabel}<button class="icon-btn col-menu-btn" title="カラムメニュー">⋯</button></div>
       </div>
@@ -911,6 +960,7 @@ class BoardView {
     return el;
   }
 
+  /** タスクカードを生成して返す */
   _renderTask(task) {
     const el = document.createElement('div');
     el.className = 'task-card';
@@ -940,8 +990,11 @@ class BoardView {
     return el;
   }
 
+  /** タイムスタンプを「今日/明日/昨日/M/D」形式の日本語に変換する */
   _formatDue(ts) {
     const d = new Date(ts);
+    // 時刻をゼロにしないと Math.round の小数誤差で翌日扱いになるバグを防ぐ
+    d.setHours(0, 0, 0, 0);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const diff = Math.round((d - today) / 86400000);
     if (diff === 0) return '今日';
@@ -950,8 +1003,10 @@ class BoardView {
     return `${d.getMonth() + 1}/${d.getDate()}`;
   }
 
+  /** HTML エスケープ (XSS 対策) */
   _esc(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+  /** カラムのコンテキストメニューを表示する */
   _showColMenu(e, col) {
     document.querySelector('.col-context-menu')?.remove();
     const menu = document.createElement('div');
@@ -961,7 +1016,19 @@ class BoardView {
     menu.style.top = rect.bottom + 4 + 'px';
     menu.style.left = rect.left + 'px';
     document.body.appendChild(menu);
-    menu.querySelector('[data-action="rename"]').addEventListener('click', () => { menu.remove(); const el = this.container.querySelector(`[data-col-id="${col.id}"] .col-name`); if (el) { el.focus(); document.execCommand('selectAll'); } });
+    menu.querySelector('[data-action="rename"]').addEventListener('click', () => {
+      menu.remove();
+      const nameEl = this.container.querySelector(`[data-col-id="${col.id}"] .col-name`);
+      if (nameEl) {
+        nameEl.focus();
+        // Selection API でテキストを全選択 (document.execCommand は非推奨のため使用しない)
+        const range = document.createRange();
+        range.selectNodeContents(nameEl);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    });
     menu.querySelector('[data-action="color"]').addEventListener('click', () => { menu.remove(); const inp = document.createElement('input'); inp.type = 'color'; inp.value = col.color; inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none'; document.body.appendChild(inp); inp.click(); inp.addEventListener('change', () => { this.store.updateColumn(col.id, { color: inp.value }); inp.remove(); }); inp.addEventListener('blur', () => setTimeout(() => inp.remove(), 300)); });
     menu.querySelector('[data-action="delete"]').addEventListener('click', async () => { menu.remove(); const tasks = this.store.getColumnTasks(col.id); if (confirm(tasks.length ? `「${col.name}」を削除しますか？\nタスク ${tasks.length} 件も削除されます。` : `「${col.name}」を削除しますか？`)) await this.store.deleteColumn(col.id); });
     const dismiss = ev => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
@@ -969,13 +1036,18 @@ class BoardView {
   }
 }
 
-/* ===== calendar.js ===== */
+/* ===================================================================
+ * CalendarView — カレンダービューのレンダリング
+ * 月次グリッド (月曜始まり) にタスクを期限日で配置する
+ * D&D でカレンダーセルにドロップするとタスクの期限を変更できる
+ * =================================================================== */
 class CalendarView {
   constructor(store) {
     this.store = store;
     this.container = document.getElementById('calendar-container');
   }
 
+  /** カレンダー全体を再描画する */
   render() {
     const { calYear: year, calMonth: month } = this.store.state;
     this.container.innerHTML = '';
@@ -985,6 +1057,7 @@ class CalendarView {
     this.container.appendChild(this._renderNodue());
   }
 
+  /** 月ナビゲーションヘッダーを生成する */
   _renderHeader(year, month) {
     const el = document.createElement('div');
     el.className = 'cal-header';
@@ -994,6 +1067,7 @@ class CalendarView {
     return el;
   }
 
+  /** 曜日ラベル行を生成する (月曜始まり) */
   _renderDayLabels() {
     const el = document.createElement('div');
     el.className = 'cal-day-labels';
@@ -1006,11 +1080,13 @@ class CalendarView {
     return el;
   }
 
+  /** 月グリッドを生成する */
   _renderGrid(year, month) {
     const grid = document.createElement('div');
     grid.className = 'cal-grid';
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
+    // 月曜始まりの空白セルを先頭に追加 (日曜=0→6、月曜=1→0 と変換)
     const startDow = (firstDay.getDay() + 6) % 7;
     for (let i = 0; i < startDow; i++) { const b = document.createElement('div'); b.className = 'cal-cell cal-blank'; grid.appendChild(b); }
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1025,6 +1101,7 @@ class CalendarView {
     return grid;
   }
 
+  /** 1日分のセルを生成する */
   _renderDayCell(day, date, tasks, isToday, dow) {
     const el = document.createElement('div');
     el.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (dow === 4 ? ' cal-fri' : '') + (dow === 5 ? ' cal-sat' : '') + (dow === 6 ? ' cal-sun' : '');
@@ -1037,18 +1114,22 @@ class CalendarView {
     addBtn.className = 'cal-add-btn';
     addBtn.title = 'この日にタスクを追加';
     addBtn.textContent = '+';
+    // 正午のタイムスタンプを期限としてモーダルに渡す
     addBtn.addEventListener('click', e => { e.stopPropagation(); const colId = this.store.columns[0]?.id; if (colId) window.modal.openCreate(colId, date.getTime() + 43200000); });
     el.appendChild(addBtn);
     const maxShow = 3;
     tasks.slice(0, maxShow).forEach(task => el.appendChild(this._renderMiniCard(task)));
     if (tasks.length > maxShow) { const more = document.createElement('div'); more.className = 'cal-more'; more.textContent = `+${tasks.length - maxShow}件`; el.appendChild(more); }
+    // N キーでこの日付にタスクを新規作成
     el.addEventListener('keydown', e => { if (e.key === 'n' || e.key === 'N') { e.preventDefault(); const colId = this.store.columns[0]?.id; if (colId) window.modal.openCreate(colId, date.getTime() + 43200000); } });
+    // ドロップで期限を変更
     el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
     el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over'); });
     el.addEventListener('drop', async e => { e.preventDefault(); el.classList.remove('drag-over'); const taskId = e.dataTransfer.getData('text/plain'); if (taskId) await this.store.updateTask(taskId, { dueDate: date.getTime() + 43200000 }); });
     return el;
   }
 
+  /** カレンダー上のミニタスクカードを生成する */
   _renderMiniCard(task) {
     const el = document.createElement('div');
     el.className = 'cal-task-card';
@@ -1056,7 +1137,11 @@ class CalendarView {
     el.draggable = true;
     el.tabIndex = 0;
     const col = this.store.state.columns.find(c => c.id === task.columnId);
-    if (col) el.style.borderLeftColor = col.color;
+    // XSS対策: カラム色は hex 形式のみ許可
+    if (col) {
+      const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
+      el.style.borderLeftColor = safeColor;
+    }
     const DOTS = { low: '🔵', medium: '🟡', high: '🟠', urgent: '🔴' };
     const dot = DOTS[task.priority] || '';
     el.innerHTML = `<span class="cal-card-title">${this._esc(task.title)}</span>${dot ? `<span class="cal-card-priority">${dot}</span>` : ''}`;
@@ -1065,6 +1150,7 @@ class CalendarView {
     return el;
   }
 
+  /** 期限なしタスク一覧エリアを生成する */
   _renderNodue() {
     const tasks = this.store.getAllTasks().filter(t => !t.dueDate);
     const el = document.createElement('div');
@@ -1076,6 +1162,7 @@ class CalendarView {
     const list = document.createElement('div');
     list.className = 'cal-nodue-list';
     tasks.forEach(task => list.appendChild(this._renderMiniCard(task)));
+    // ドロップで期限を null に設定
     list.addEventListener('dragover', e => { e.preventDefault(); list.classList.add('drag-over'); });
     list.addEventListener('dragleave', () => list.classList.remove('drag-over'));
     list.addEventListener('drop', async e => { e.preventDefault(); list.classList.remove('drag-over'); const taskId = e.dataTransfer.getData('text/plain'); if (taskId) await this.store.updateTask(taskId, { dueDate: null }); });
@@ -1083,6 +1170,7 @@ class CalendarView {
     return el;
   }
 
+  /** 前月・翌月に移動する */
   _navigate(delta) {
     let { calYear: year, calMonth: month } = this.store.state;
     month += delta;
@@ -1091,45 +1179,56 @@ class CalendarView {
     this.store.setCalendarNav(year, month);
   }
 
+  /** HTML エスケープ (XSS 対策) */
   _esc(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 }
 
-/* ===== modal.js ===== */
+/* ===================================================================
+ * Modal — タスク作成・編集モーダル
+ * タブ順: タイトル(1) → 詳細(2) → 期限(3) → 優先度(4) → キャンセル(5) → 登録(6)
+ * 期限入力: MMDD 4桁入力 / カレンダーピッカー / 空欄TAB→次金曜自動設定
+ * =================================================================== */
 class Modal {
   constructor(store) {
     this.store = store;
     this._isEdit = false;
     this._currentTaskId = null;
     this._currentColumnId = null;
-    this._presetDueDate = null;
     this._links = [];
     this._attachments = [];
+    // カレンダーピッカーやカレンダービューから選択された正確な日時を保持する
+    // _parseMmdd の年推定より優先される
     this._exactDueTs = null;
     this.el = document.getElementById('task-modal');
     this._init();
   }
 
+  /** イベントリスナーを全て登録する (一度だけ呼ばれる) */
   _init() {
+    // 背景クリックで閉じる
     this.el.addEventListener('click', e => { if (e.target === this.el) this.close(); });
     this.el.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.stopPropagation(); this.close(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); this._submit(); }
     });
+    // 期限入力: 数字のみ受け付け、4桁入力でプレビューを更新
     const dueInput = this._q('#task-due-input');
     dueInput.addEventListener('input', () => {
       dueInput.value = dueInput.value.replace(/\D/g, '').slice(0, 4);
       dueInput.classList.remove('auto-set');
-      this._exactDueTs = null;
+      this._exactDueTs = null;  // 手入力したので exactDueTs をリセット
       if (dueInput.value.length === 4) {
         const d = this._parseMmdd(dueInput.value);
         if (d) { this._showDueDisplay(d.getTime(), false); }
         else { const disp = this._q('#task-due-display'); disp.textContent = '無効な日付'; disp.className = 'due-display due-error'; }
       } else { this._q('#task-due-display').textContent = ''; this._q('#task-due-display').className = 'due-display'; }
     });
+    // 空欄のまま TAB で離れたら次の金曜日を自動設定
     dueInput.addEventListener('blur', () => {
       if (!dueInput.value) { const fri = this._nextFriday(); this._exactDueTs = fri.getTime(); dueInput.classList.add('auto-set'); this._showDueDisplay(fri.getTime(), true); }
     });
     this._q('#cal-pick-btn').addEventListener('click', () => this._togglePicker());
+    // 優先度: ← → キーと数字キー 1〜5 で選択
     const priorityGroup = this._q('.priority-group');
     priorityGroup.addEventListener('keydown', e => {
       const items = [...priorityGroup.querySelectorAll('.priority-opt')];
@@ -1144,7 +1243,9 @@ class Modal {
     });
     this._q('#add-link-btn').addEventListener('click', () => this._addLink());
     this._q('#link-url-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); this._addLink(); } });
+    // Ctrl+V でクリップボードの画像を添付
     this.el.addEventListener('paste', e => this._handlePaste(e));
+    // ドラッグ&ドロップで画像ファイルを添付
     const dropArea = this._q('#task-attachments');
     dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('drag-over'); });
     dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag-over'));
@@ -1155,20 +1256,29 @@ class Modal {
     this._q('#task-cancel-btn-footer').addEventListener('click', () => this.close());
   }
 
+  /** タスク作成モードでモーダルを開く */
   openCreate(columnId, presetDueDate = null) {
-    this._isEdit = false; this._currentTaskId = null; this._currentColumnId = columnId; this._presetDueDate = presetDueDate;
+    this._isEdit = false; this._currentTaskId = null; this._currentColumnId = columnId;
     this._reset();
-    if (presetDueDate) { const d = new Date(presetDueDate); const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); this._q('#task-due-input').value = mmdd; this._exactDueTs = presetDueDate; this._showDueDisplay(presetDueDate, false); }
+    if (presetDueDate) {
+      const d = new Date(presetDueDate);
+      const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+      this._q('#task-due-input').value = mmdd;
+      // カレンダーセルからの正確な日時を保持 (_parseMmdd による年推定を回避)
+      this._exactDueTs = presetDueDate;
+      this._showDueDisplay(presetDueDate, false);
+    }
     this._q('#modal-title').textContent = 'タスク作成';
     this._q('#task-submit-btn').textContent = '登録';
     this.el.classList.remove('hidden');
     this._q('#task-title-input').focus();
   }
 
+  /** タスク編集モードでモーダルを開く */
   openEdit(taskId) {
     const task = this.store.state.tasks.find(t => t.id === taskId);
     if (!task) return;
-    this._isEdit = true; this._currentTaskId = taskId; this._currentColumnId = task.columnId; this._presetDueDate = null;
+    this._isEdit = true; this._currentTaskId = taskId; this._currentColumnId = task.columnId;
     this._reset(); this._populate(task);
     this._q('#modal-title').textContent = 'タスク編集';
     this._q('#task-submit-btn').textContent = '更新';
@@ -1176,8 +1286,10 @@ class Modal {
     this._q('#task-title-input').focus();
   }
 
+  /** モーダルを閉じてフォームをリセットする */
   close() { this.el.classList.add('hidden'); this._currentTaskId = null; this._currentColumnId = null; this._hidePicker(); }
 
+  /** フォームの内容を Store に保存して閉じる */
   async _submit() {
     const title = this._q('#task-title-input').value.trim();
     if (!title) { this._q('#task-title-input').focus(); this._q('#task-title-input').classList.add('field-error'); setTimeout(() => this._q('#task-title-input').classList.remove('field-error'), 800); return; }
@@ -1192,12 +1304,13 @@ class Modal {
     this.close();
   }
 
+  /** フォームを初期状態にリセットする */
   _reset() {
     this._exactDueTs = null;
     this._q('#task-title-input').value = '';
     this._q('#task-desc-input').value = '';
     this._q('#task-due-input').value = '';
-    this._q('#task-due-input').className = 'due-input';
+    this._q('#task-due-input').className = 'form-input due-input';
     this._q('#task-due-display').textContent = '';
     this._q('#task-due-display').className = 'due-display';
     this._q('.priority-group').querySelectorAll('.priority-opt').forEach(o => o.classList.remove('active'));
@@ -1208,6 +1321,7 @@ class Modal {
     this._hidePicker();
   }
 
+  /** 既存タスクのデータをフォームに反映する */
   _populate(task) {
     this._q('#task-title-input').value = task.title;
     this._q('#task-desc-input').value = task.description || '';
@@ -1219,6 +1333,7 @@ class Modal {
     this._renderLinks(); this._renderAttachments();
   }
 
+  /** 期限日表示ラベルを更新する */
   _showDueDisplay(ts, isAuto) {
     const d = new Date(ts);
     const disp = this._q('#task-due-display');
@@ -1227,6 +1342,12 @@ class Modal {
     disp.title = isAuto ? '次の金曜日を自動設定しました (変更可)' : '';
   }
 
+  /**
+   * 期限日タイムスタンプを解決する優先順位:
+   * 1. _exactDueTs (カレンダーピッカー選択 / カレンダーセルからの preset)
+   * 2. MMDD 入力フィールドの手入力値をパース
+   * 3. null (期限なし)
+   */
   _resolveDueDate() {
     if (this._exactDueTs !== null) return this._exactDueTs;
     const val = this._q('#task-due-input').value;
@@ -1234,48 +1355,69 @@ class Modal {
     return null;
   }
 
+  /**
+   * "MMDD" 形式の4桁文字列を Date オブジェクトに変換する
+   * 過去の日付は翌年として解釈する
+   */
   _parseMmdd(val) {
     const mm = parseInt(val.slice(0, 2), 10), dd = parseInt(val.slice(2, 4), 10);
     if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
     const now = new Date();
     const candidate = new Date(now.getFullYear(), mm - 1, dd);
-    if (candidate.getMonth() !== mm - 1) return null;
+    if (candidate.getMonth() !== mm - 1) return null;  // 2月31日など存在しない日
     const today = new Date(); today.setHours(0, 0, 0, 0);
     if (candidate < today) candidate.setFullYear(now.getFullYear() + 1);
     return candidate;
   }
 
+  /** 次の金曜日正午の Date を返す (今日が金曜なら翌週金曜) */
   _nextFriday() {
     const today = new Date();
     const dow = today.getDay();
-    const daysUntil = dow === 5 ? 7 : (5 - dow + 7) % 7 || 7;
+    // 今日が金曜(5)なら7日後、それ以外は次の金曜まで計算
+    const daysUntil = dow === 5 ? 7 : (5 - dow + 7) % 7;
     const fri = new Date(today);
     fri.setDate(today.getDate() + daysUntil);
     fri.setHours(12, 0, 0, 0);
     return fri;
   }
 
+  /** URL フィールドのリンクをリストに追加する */
   _addLink() {
     const urlInput = this._q('#link-url-input'), titleInput = this._q('#link-title-input');
     const url = urlInput.value.trim();
     if (!url) return;
+    // XSS対策: javascript: などの危険なプロトコルを拒否する
+    if (!this._isSafeUrl(url)) { alert('URLはhttp://、https://、またはmailto:のみ使用できます。'); urlInput.focus(); return; }
     this._links.push({ id: crypto.randomUUID(), url, title: titleInput.value.trim() || url });
     urlInput.value = ''; titleInput.value = '';
     this._renderLinks(); urlInput.focus();
   }
 
+  /** リンク一覧を再描画する */
   _renderLinks() {
     const list = this._q('#links-list');
     list.innerHTML = '';
     this._links.forEach((link, i) => {
       const item = document.createElement('div');
       item.className = 'link-item';
-      item.innerHTML = `<a href="${this._esc(link.url)}" target="_blank" rel="noopener">${this._esc(link.title)}</a><button class="remove-btn" title="削除">×</button>`;
+      // rel="noopener noreferrer": opener 経由のリファラ漏えいを防ぐ
+      item.innerHTML = `<a href="${this._esc(link.url)}" target="_blank" rel="noopener noreferrer">${this._esc(link.title)}</a><button class="remove-btn" title="削除">×</button>`;
       item.querySelector('.remove-btn').addEventListener('click', () => { this._links.splice(i, 1); this._renderLinks(); });
       list.appendChild(item);
     });
   }
 
+  /**
+   * URL が安全なプロトコルかどうかを検証する
+   * http / https / mailto のみ許可し javascript: などを拒否する
+   */
+  _isSafeUrl(url) {
+    try { return ['http:', 'https:', 'mailto:'].includes(new URL(url).protocol); }
+    catch { return false; }
+  }
+
+  /** クリップボードから貼り付けられた画像を添付する */
   async _handlePaste(e) {
     const items = [...(e.clipboardData?.items || [])].filter(item => item.type.startsWith('image/'));
     if (!items.length) return;
@@ -1283,6 +1425,7 @@ class Modal {
     for (const item of items) { const file = item.getAsFile(); if (file) await this._addAttachmentFile(file); }
   }
 
+  /** 画像ファイルを Base64 に変換して添付リストに追加する (上限 5MB) */
   async _addAttachmentFile(file) {
     if (file.size > 5 * 1024 * 1024) { alert(`「${file.name}」は5MBを超えています。`); return; }
     const dataUrl = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
@@ -1290,6 +1433,7 @@ class Modal {
     this._renderAttachments();
   }
 
+  /** 添付ファイル一覧を再描画する */
   _renderAttachments() {
     const list = this._q('#attachments-list');
     list.innerHTML = '';
@@ -1303,14 +1447,17 @@ class Modal {
     });
   }
 
+  /** インラインカレンダーピッカーの表示/非表示を切り替える */
   _togglePicker() {
     const picker = this._q('#cal-picker');
     if (picker.classList.contains('hidden')) { this._renderPicker(); picker.classList.remove('hidden'); }
     else this._hidePicker();
   }
 
+  /** カレンダーピッカーを非表示にする */
   _hidePicker() { this._q('#cal-picker')?.classList.add('hidden'); }
 
+  /** インラインカレンダーピッカーを描画する */
   _renderPicker() {
     const picker = this._q('#cal-picker');
     const now = new Date();
@@ -1343,6 +1490,7 @@ class Modal {
           const mmdd = String(month).padStart(2, '0') + String(d).padStart(2, '0');
           const dueInput = this._q('#task-due-input');
           dueInput.value = mmdd; dueInput.classList.remove('auto-set');
+          // ピッカーで選択した正確な日時を保持 (_parseMmdd の年推定を回避)
           this._exactDueTs = selected.getTime();
           this._showDueDisplay(selected.getTime(), false);
           this._hidePicker();
@@ -1355,10 +1503,16 @@ class Modal {
   }
 
   _q(sel) { return this.el.querySelector(sel); }
+
+  /** HTML エスケープ (XSS 対策) */
   _esc(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 }
 
-/* ===== drag.js ===== */
+/* ===================================================================
+ * DragManager — HTML5 ドラッグ&ドロップ管理
+ * カンバン列内のタスク並び替えとカラム間移動を処理する
+ * ドロップ位置にプレースホルダーを表示して視覚的フィードバックを提供
+ * =================================================================== */
 class DragManager {
   constructor(store) {
     this.store = store;
@@ -1373,6 +1527,7 @@ class DragManager {
       this._dragTaskId = card.dataset.taskId;
       e.dataTransfer.setData('text/plain', this._dragTaskId);
       e.dataTransfer.effectAllowed = 'move';
+      // 次フレームで .dragging を付与しないと元カードが消えた状態でドラッグ画像が生成されてしまう
       requestAnimationFrame(() => card.classList.add('dragging'));
     });
     document.addEventListener('dragend', e => {
@@ -1403,12 +1558,21 @@ class DragManager {
       const colId = taskList.dataset.colId;
       const ph = document.querySelector('.drop-placeholder');
       let toIndex = -1;
-      if (ph) { const siblings = [...taskList.querySelectorAll('.task-card:not(.dragging)')]; toIndex = siblings.indexOf(ph); if (toIndex < 0) toIndex = siblings.length; ph.remove(); }
+      if (ph) {
+        // プレースホルダーは .task-card ではないため querySelectorAll('.task-card').indexOf(ph) は常に -1 になる
+        // 全子要素の中でプレースホルダーより前にある .task-card の数をインデックスとして使う
+        const allChildren = [...taskList.children];
+        const phIdx = allChildren.indexOf(ph);
+        toIndex = allChildren.slice(0, phIdx)
+          .filter(el => el.classList.contains('task-card') && !el.classList.contains('dragging')).length;
+        ph.remove();
+      }
       taskList.classList.remove('drag-over');
       await this.store.moveTask(this._dragTaskId, colId, toIndex >= 0 ? toIndex : undefined);
     });
   }
 
+  /** カーソル Y 座標を基に挿入位置の直後要素を返す (最後尾なら undefined) */
   _getAfterElement(container, y) {
     const els = [...container.querySelectorAll('.task-card:not(.dragging)')];
     return els.reduce((closest, el) => {
@@ -1420,14 +1584,20 @@ class DragManager {
   }
 }
 
-/* ===== keyboard.js ===== */
+/* ===================================================================
+ * KeyboardManager — キーボードショートカット管理
+ * モーダル/入力中 は無視し、コンテキストに応じた操作を行う
+ * =================================================================== */
 class KeyboardManager {
   constructor(store) { this.store = store; document.addEventListener('keydown', e => this._handle(e)); }
 
   _handle(e) {
+    // 入力要素内のキー操作は無視する
     if (this._isTyping(e.target)) return;
+    // ショートカット一覧モーダルが開いている場合は Escape だけ処理する
     const shortcutsOpen = !document.getElementById('shortcuts-modal').classList.contains('hidden');
     if (shortcutsOpen) { if (e.key === 'Escape') document.getElementById('shortcuts-modal').classList.add('hidden'); return; }
+    // タスクモーダルが開いている場合はショートカットを無効化 (モーダル側で処理)
     const modalOpen = !document.getElementById('task-modal').classList.contains('hidden');
     if (modalOpen) return;
     const ctrl = e.ctrlKey || e.metaKey;
@@ -1443,6 +1613,7 @@ class KeyboardManager {
       case 'ArrowRight': e.preventDefault(); if (e.shiftKey) this._moveTaskToCol(1);  else this._focusCol(1);  break;
       case 'ArrowUp':    e.preventDefault(); if (e.shiftKey) this._moveTaskInCol(-1); else this._selectTask(-1); break;
       case 'ArrowDown':  e.preventDefault(); if (e.shiftKey) this._moveTaskInCol(1);  else this._selectTask(1);  break;
+      // カレンダービューのみ有効な月移動
       case 'h': case 'H': if (!ctrl && this.store.state.view === 'calendar') { e.preventDefault(); this.store.setCalendarNav(...this._monthDelta(-1)); } break;
       case 'l': case 'L': if (!ctrl && this.store.state.view === 'calendar') { e.preventDefault(); this.store.setCalendarNav(...this._monthDelta(1));  } break;
       case '?': e.preventDefault(); document.getElementById('shortcuts-modal').classList.remove('hidden'); break;
@@ -1450,24 +1621,30 @@ class KeyboardManager {
     }
   }
 
+  /** テキスト入力中かどうかを判定する */
   _isTyping(el) { return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable; }
 
+  /** フォーカス中またはデフォルトカラムにタスクを新規作成する */
   _newTask() { const colId = this.store.state.focusedColumnId || this.store.columns[0]?.id; if (colId) window.modal.openCreate(colId); }
 
+  /** 選択中のタスクを削除する */
   async _deleteSelected() {
     const id = this.store.state.selectedTaskId; if (!id) return;
     const task = this.store.state.tasks.find(t => t.id === id);
     if (task && confirm(`「${task.title}」を削除しますか？\n(Ctrl+Z で元に戻せます)`)) await this.store.deleteTask(id);
   }
 
+  /** 選択中のタスクを編集モーダルで開く */
   _openSelected() { const id = this.store.state.selectedTaskId; if (id) window.modal.openEdit(id); }
 
+  /** カラムフォーカスを左右に移動する */
   _focusCol(delta) {
     const cols = this.store.columns; if (!cols.length) return;
     const idx = Math.max(0, cols.findIndex(c => c.id === this.store.state.focusedColumnId));
     this.store.focusColumn(cols[Math.max(0, Math.min(cols.length - 1, idx + delta))].id);
   }
 
+  /** 同一カラム内でタスク選択を上下に移動する */
   _selectTask(delta) {
     const colId = this.store.state.focusedColumnId || this.store.columns[0]?.id; if (!colId) return;
     this.store.focusColumn(colId);
@@ -1476,6 +1653,7 @@ class KeyboardManager {
     this.store.selectTask(tasks[idx < 0 ? 0 : Math.max(0, Math.min(tasks.length - 1, idx + delta))].id);
   }
 
+  /** 選択中タスクを隣のカラムに移動する */
   async _moveTaskToCol(delta) {
     const id = this.store.state.selectedTaskId; if (!id) return;
     const task = this.store.state.tasks.find(t => t.id === id); if (!task) return;
@@ -1487,6 +1665,7 @@ class KeyboardManager {
     this.store.focusColumn(cols[newIdx].id);
   }
 
+  /** 選択中タスクを同一カラム内で上下に移動する */
   async _moveTaskInCol(delta) {
     const id = this.store.state.selectedTaskId; if (!id) return;
     const task = this.store.state.tasks.find(t => t.id === id); if (!task) return;
@@ -1497,6 +1676,7 @@ class KeyboardManager {
     await this.store.moveTask(id, task.columnId, newIdx);
   }
 
+  /** 現在の月から delta ヶ月ずらした [year, month] を返す */
   _monthDelta(delta) {
     let { calYear: year, calMonth: month } = this.store.state;
     month += delta;
@@ -1505,7 +1685,9 @@ class KeyboardManager {
   }
 }
 
-/* ===== app.js ===== */
+/* ===================================================================
+ * アプリケーション起動
+ * =================================================================== */
 (async () => {
   const db = new TaskDB();
   await db.init();
@@ -1519,6 +1701,7 @@ class KeyboardManager {
   const boardSection = document.getElementById('board-view');
   const calSection = document.getElementById('calendar-view');
 
+  /** ビューを切り替えて再描画する */
   function applyView(view) {
     document.querySelectorAll('.view-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view));
     boardSection.classList.toggle('hidden', view !== 'kanban');
@@ -1526,9 +1709,9 @@ class KeyboardManager {
     if (view === 'kanban') boardView.render(); else calView.render();
   }
 
-  store.on('loaded', () => applyView(store.state.view));
-  store.on('changed', () => { if (store.state.view === 'kanban') boardView.render(); else calView.render(); });
-  store.on('viewChanged', view => applyView(view));
+  store.on('loaded',        () => applyView(store.state.view));
+  store.on('changed',       () => { if (store.state.view === 'kanban') boardView.render(); else calView.render(); });
+  store.on('viewChanged',   view => applyView(view));
   store.on('calNavChanged', () => calView.render());
   store.on('selectionChanged', () => {
     document.querySelectorAll('.task-card').forEach(el => {
@@ -1542,6 +1725,7 @@ class KeyboardManager {
   document.querySelectorAll('.view-btn').forEach(btn => btn.addEventListener('click', () => store.setView(btn.dataset.view)));
   document.getElementById('add-col-btn').addEventListener('click', () => store.createColumn());
 
+  // エクスポート: 全データを JSON ファイルとしてダウンロード
   document.getElementById('export-btn').addEventListener('click', () => {
     const data = { boards: store.state.boards, columns: store.state.columns, tasks: store.state.tasks, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1550,6 +1734,7 @@ class KeyboardManager {
     URL.revokeObjectURL(url);
   });
 
+  // インポート: JSON ファイルを読み込んで DB に上書き
   document.getElementById('import-btn').addEventListener('click', () => {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json';
     inp.onchange = async e => {
@@ -1570,11 +1755,13 @@ class KeyboardManager {
     if (e.target.id === 'shortcuts-modal' || e.target.id === 'close-shortcuts-btn') document.getElementById('shortcuts-modal').classList.add('hidden');
   });
 
+  // ボードタイトルのインライン編集
   const boardTitle = document.getElementById('board-title');
   boardTitle.addEventListener('blur', () => { const n = boardTitle.textContent.trim(); if (store.board && n && n !== store.board.name) { store.board.name = n; db.put('boards', store.board); } });
   boardTitle.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); boardTitle.blur(); } });
   store.on('loaded', () => { boardTitle.textContent = store.board?.name || 'Task Station'; });
 
+  // タスク以外の場所をクリックしたら選択解除
   document.addEventListener('click', e => { if (!e.target.closest('.task-card') && !e.target.closest('#task-modal')) store.selectTask(null); });
 
   await store.loadAll();
