@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Station</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- Toolbar -->
+  <header id="toolbar">
+    <span id="board-title" contenteditable spellcheck="false">Task Station</span>
+    <div class="toolbar-sep"></div>
+    <div class="view-toggle">
+      <button class="view-btn active" data-view="kanban">📋 カンバン</button>
+      <button class="view-btn" data-view="calendar">📅 カレンダー</button>
+    </div>
+    <button id="add-col-btn">＋ カラム追加</button>
+    <div class="toolbar-right">
+      <button id="export-btn" class="toolbar-btn" title="エクスポート (Ctrl+E)">↓ 書き出し</button>
+      <button id="import-btn" class="toolbar-btn" title="インポート (Ctrl+I)">↑ 読み込み</button>
+      <button id="help-btn" class="icon-btn" title="ショートカット一覧 (?)">?</button>
+    </div>
+  </header>
+
+  <!-- Kanban View -->
+  <div id="board-view" class="view">
+    <div id="columns-container"></div>
+  </div>
+
+  <!-- Calendar View -->
+  <div id="calendar-view" class="view hidden">
+    <div id="calendar-container"></div>
+  </div>
+
+</div>
+
+<!-- Task Modal -->
+<div id="task-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 id="modal-title">タスク作成</h2>
+      <button class="modal-close" id="task-cancel-btn" title="閉じる (Esc)">×</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Title -->
+      <div class="form-field">
+        <label class="form-label" for="task-title-input">タイトル <span style="color:var(--priority-urgent)">*</span></label>
+        <input
+          id="task-title-input"
+          class="form-input"
+          type="text"
+          placeholder="タスクのタイトル"
+          tabindex="1"
+          autocomplete="off"
+        >
+      </div>
+
+      <!-- Description -->
+      <div class="form-field">
+        <label class="form-label" for="task-desc-input">詳細</label>
+        <textarea
+          id="task-desc-input"
+          class="form-input"
+          placeholder="詳細を入力… (Shift+Enter で改行)"
+          rows="3"
+          tabindex="2"
+        ></textarea>
+      </div>
+
+      <!-- Due Date -->
+      <div class="form-field">
+        <label class="form-label" for="task-due-input">期限</label>
+        <div class="due-row">
+          <input
+            id="task-due-input"
+            class="form-input due-input"
+            type="text"
+            inputmode="numeric"
+            placeholder="0521"
+            maxlength="4"
+            tabindex="3"
+            autocomplete="off"
+            title="MMDD 形式で4桁入力 (例: 0521 → 5月21日)"
+          >
+          <span id="task-due-display" class="due-display"></span>
+          <button id="cal-pick-btn" class="cal-pick-btn" tabindex="-1" title="カレンダーから選択 (Space)">📅</button>
+        </div>
+        <div id="cal-picker" class="hidden"></div>
+        <p class="form-hint">4桁(MMDD)入力、またはカレンダーから選択。空欄で TAB → 次の金曜日を自動設定</p>
+      </div>
+
+      <!-- Priority -->
+      <div class="form-field">
+        <label class="form-label">優先度</label>
+        <div class="priority-group" tabindex="4" role="radiogroup" aria-label="優先度">
+          <button class="priority-opt active" data-priority="none"  role="radio" aria-checked="true"  title="1: なし">なし</button>
+          <button class="priority-opt"        data-priority="low"   role="radio" aria-checked="false" title="2: 低">低</button>
+          <button class="priority-opt"        data-priority="medium"role="radio" aria-checked="false" title="3: 中">中</button>
+          <button class="priority-opt"        data-priority="high"  role="radio" aria-checked="false" title="4: 高">高</button>
+          <button class="priority-opt"        data-priority="urgent"role="radio" aria-checked="false" title="5: 緊急">緊急</button>
+        </div>
+        <p class="form-hint">← → または数字キー 1〜5 で選択</p>
+      </div>
+
+      <!-- Links -->
+      <div class="form-field">
+        <label class="form-label">リンク</label>
+        <div class="link-add-row">
+          <input id="link-url-input"   class="form-input" type="url"  placeholder="URL" tabindex="-1">
+          <input id="link-title-input" class="form-input" type="text" placeholder="タイトル (省略可)" tabindex="-1">
+          <button id="add-link-btn" class="btn-secondary" tabindex="-1">追加</button>
+        </div>
+        <div id="links-list"></div>
+      </div>
+
+      <!-- Attachments -->
+      <div class="form-field">
+        <label class="form-label">添付ファイル</label>
+        <div id="task-attachments">
+          <p class="attach-hint">スクリーンショットを Ctrl+V でペースト<br>または画像をここにドロップ</p>
+          <button id="attach-file-btn" class="btn-secondary" style="margin-top:6px;width:100%" tabindex="-1">📁 ファイルを選択</button>
+          <div id="attachments-list"></div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer">
+        <button id="task-cancel-btn-footer" class="btn-cancel" tabindex="5">キャンセル</button>
+        <button id="task-submit-btn" class="btn-primary" tabindex="6">登録</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts Modal -->
+<div id="shortcuts-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 id="shortcuts-title">キーボードショートカット</h2>
+      <button class="modal-close" id="close-shortcuts-btn">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="shortcuts-grid">
+
+        <div class="shortcut-section">ボード操作</div>
+        <div class="shortcut-row"><span class="shortcut-desc">新規タスク作成</span><kbd>N</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">カラム追加</span><kbd>C</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">ビュー切り替え</span><kbd>V</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">元に戻す</span><kbd>Ctrl Z</kbd></div>
+
+        <div class="shortcut-section">タスク操作</div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスクを開く</span><kbd>Enter</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスクを編集</span><kbd>E</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスクを削除</span><kbd>D</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">選択解除</span><kbd>Esc</kbd></div>
+
+        <div class="shortcut-section">ナビゲーション</div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスク上下移動</span><kbd>↑</kbd> <kbd>↓</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">カラム切り替え</span><kbd>←</kbd> <kbd>→</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスクをカラム間移動</span><kbd>Shift ←→</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスクを上下に移動</span><kbd>Shift ↑↓</kbd></div>
+
+        <div class="shortcut-section">カレンダービュー</div>
+        <div class="shortcut-row"><span class="shortcut-desc">前月 / 翌月</span><kbd>H</kbd> <kbd>L</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">セルに新規タスク</span><kbd>N</kbd></div>
+
+        <div class="shortcut-section">モーダル内</div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスク登録</span><kbd>Ctrl Enter</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">閉じる</span><kbd>Esc</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">優先度選択</span><kbd>1</kbd>〜<kbd>5</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">画像ペースト</span><kbd>Ctrl V</kbd></div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/db.js"></script>
+<script src="js/store.js"></script>
+<script src="js/board.js"></script>
+<script src="js/calendar.js"></script>
+<script src="js/modal.js"></script>
+<script src="js/drag.js"></script>
+<script src="js/keyboard.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
