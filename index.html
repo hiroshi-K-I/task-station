@@ -7,48 +7,48 @@
   <style>
 /* ===== Variables ===== */
 :root {
-  --bg: #f1f5f9;
+  --bg: #f7f8fa;
   --bg-2: #ffffff;
-  --bg-3: #f8fafc;
+  --bg-3: #f7f8fa;
   --surface: #ffffff;
-  --surface-hover: #f1f5f9;
-  --border: #e2e8f0;
+  --surface-hover: #f3f4f6;
+  --border: #e5e7eb;
   --border-focus: #6366f1;
-  --text: #1e293b;
-  --text-2: #64748b;
-  --text-3: #94a3b8;
-  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
-  --shadow-md: 0 4px 6px -1px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+  --text: #111827;
+  --text-2: #6b7280;
+  --text-3: #9ca3af;
+  --shadow: 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.10);
   --radius: 8px;
-  --radius-sm: 4px;
-  --radius-lg: 12px;
-  --priority-none: #cbd5e1;
+  --radius-sm: 5px;
+  --radius-lg: 10px;
+  --priority-none: #d1d5db;
   --priority-low: #3b82f6;
   --priority-medium: #f59e0b;
   --priority-high: #f97316;
   --priority-urgent: #ef4444;
   --col-width: 280px;
-  --toolbar-h: 56px;
+  --toolbar-h: 52px;
   --cal-sat: #3b82f6;
   --cal-sun: #ef4444;
   --cal-fri: #10b981;
-  --transition: 0.15s ease;
+  --transition: 0.12s ease;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f172a;
-    --bg-2: #1e293b;
-    --bg-3: #0f172a;
-    --surface: #1e293b;
-    --surface-hover: #334155;
-    --border: #334155;
-    --text: #f1f5f9;
-    --text-2: #94a3b8;
-    --text-3: #475569;
-    --shadow: 0 1px 3px rgba(0,0,0,.3);
-    --shadow-md: 0 4px 6px -1px rgba(0,0,0,.3);
-    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.4);
+    --bg: #111827;
+    --bg-2: #1f2937;
+    --bg-3: #111827;
+    --surface: #1f2937;
+    --surface-hover: #374151;
+    --border: #374151;
+    --text: #f9fafb;
+    --text-2: #9ca3af;
+    --text-3: #4b5563;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-md: 0 2px 8px rgba(0,0,0,.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
   }
 }
 
@@ -78,65 +78,64 @@ input, textarea { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 16px;
   flex-shrink: 0;
-  box-shadow: var(--shadow);
   z-index: 10;
 }
 #board-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text);
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: var(--radius-sm);
-  min-width: 80px;
+  min-width: 60px;
   white-space: nowrap;
 }
 #board-title:hover { background: var(--surface-hover); }
 #board-title:focus { background: var(--surface-hover); box-shadow: 0 0 0 2px var(--border-focus); }
-.toolbar-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
-.view-toggle { display: flex; background: var(--bg); border-radius: var(--radius); padding: 3px; gap: 2px; }
+.toolbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+.view-toggle { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px; gap: 1px; }
 .view-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
   transition: background var(--transition), color var(--transition);
 }
-.view-btn:hover { background: var(--surface); color: var(--text); }
+.view-btn:hover { color: var(--text); }
 .view-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-.toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
 .toolbar-btn {
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-2);
   border: 1px solid var(--border);
-  background: var(--surface);
-  transition: background var(--transition);
+  background: transparent;
+  transition: background var(--transition), color var(--transition);
 }
 .toolbar-btn:hover { background: var(--surface-hover); color: var(--text); }
 .icon-btn {
-  width: 30px; height: 30px;
+  width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-2);
-  font-size: 16px;
+  font-size: 14px;
   transition: background var(--transition);
 }
 .icon-btn:hover { background: var(--surface-hover); color: var(--text); }
 #add-col-btn {
-  padding: 6px 12px;
+  padding: 5px 10px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-2);
+  color: var(--text-3);
   border: 1px dashed var(--border);
   transition: all var(--transition);
 }
-#add-col-btn:hover { border-color: var(--border-focus); color: var(--border-focus); background: var(--surface); }
+#add-col-btn:hover { border-color: var(--border-focus); color: var(--border-focus); }
 
 /* ===== Views ===== */
 .view { flex: 1; overflow: hidden; }
@@ -161,10 +160,10 @@ input, textarea { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - var(--toolbar-h) - 32px);
-  box-shadow: var(--shadow);
-  transition: box-shadow var(--transition);
+  border: 1px solid var(--border);
+  transition: border-color var(--transition);
 }
-.column.focused { box-shadow: 0 0 0 2px var(--border-focus), var(--shadow-md); }
+.column.focused { border-color: rgba(99,102,241,.4); box-shadow: 0 0 0 2px rgba(99,102,241,.1); }
 .col-header {
   padding: 12px 12px 10px;
   display: flex;
@@ -186,12 +185,12 @@ input, textarea { font: inherit; color: inherit; }
 .col-name:focus { background: var(--surface-hover); box-shadow: 0 0 0 2px var(--border-focus); }
 .col-header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .task-count, .wip-badge {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-3);
-  background: var(--bg);
-  padding: 1px 7px;
-  border-radius: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
 }
 .wip-over { background: #fee2e2; color: #dc2626; }
 .col-menu-btn { font-size: 18px; letter-spacing: -1px; color: var(--text-3); }
@@ -225,17 +224,16 @@ input, textarea { font: inherit; color: inherit; }
 .task-card {
   background: var(--surface);
   border-radius: var(--radius);
-  box-shadow: var(--shadow);
   display: flex;
   cursor: pointer;
-  transition: box-shadow var(--transition), transform var(--transition);
+  transition: border-color var(--transition), box-shadow var(--transition);
   position: relative;
   border: 1px solid var(--border);
   outline: none;
 }
-.task-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
-.task-card.selected { box-shadow: 0 0 0 2px var(--border-focus), var(--shadow-md); border-color: var(--border-focus); }
-.task-card.dragging { opacity: 0.4; box-shadow: none; }
+.task-card:hover { border-color: var(--text-3); box-shadow: var(--shadow); }
+.task-card.selected { border-color: var(--border-focus); box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+.task-card.dragging { opacity: 0.35; }
 .task-card:focus-visible { box-shadow: 0 0 0 2px var(--border-focus); }
 .task-priority-bar { width: 4px; border-radius: var(--radius) 0 0 var(--radius); flex-shrink: 0; }
 .task-body { padding: 10px 10px 8px; flex: 1; min-width: 0; }
@@ -352,7 +350,7 @@ input, textarea { font: inherit; color: inherit; }
 }
 .cal-task-card:hover { filter: brightness(0.96); transform: translateX(1px); }
 .cal-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.cal-card-priority { flex-shrink: 0; font-size: 10px; }
+.cal-card-priority { flex-shrink: 0; font-size: 8px; line-height: 1; }
 .cal-more { font-size: 11px; color: var(--text-3); margin-top: 4px; padding-left: 4px; cursor: pointer; }
 .cal-more:hover { color: var(--text-2); }
 .cal-nodue { margin-top: 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
@@ -483,58 +481,58 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
 /* ===== Quick Capture (Q キーで開く高速タスク追加バー) ===== */
 #quick-capture {
   position: fixed;
-  top: 70px;
+  top: 64px;
   left: 50%;
-  transform: translateX(-50%) translateY(-30px);
+  transform: translateX(-50%) translateY(-20px);
   background: var(--surface);
-  border: 1.5px solid var(--border-focus);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: 10px 16px;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 560px;
+  gap: 8px;
+  width: 520px;
   max-width: calc(100vw - 32px);
   z-index: 150;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .18s ease, transform .18s ease;
+  transition: opacity .15s ease, transform .15s ease;
 }
 #quick-capture.visible { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
-.qc-icon { font-size: 18px; }
-.qc-input { flex: 1; border: none; background: none; outline: none; font-size: 15px; color: var(--text); min-width: 0; }
+.qc-icon { font-size: 13px; color: var(--text-3); flex-shrink: 0; }
+.qc-input { flex: 1; border: none; background: none; outline: none; font-size: 14px; color: var(--text); min-width: 0; }
 .qc-hint { font-size: 11px; color: var(--text-3); white-space: nowrap; }
-.qc-tags { display: flex; gap: 4px; flex-shrink: 0; }
-.qc-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--bg); color: var(--text-2); font-weight: 600; }
-.qc-tag.priority-low    { background: rgba(59,130,246,.15);  color: var(--priority-low); }
-.qc-tag.priority-medium { background: rgba(245,158,11,.15);  color: var(--priority-medium); }
-.qc-tag.priority-high   { background: rgba(249,115,22,.15);  color: var(--priority-high); }
-.qc-tag.priority-urgent { background: rgba(239,68,68,.15);   color: var(--priority-urgent); }
-.qc-tag.due             { background: rgba(99,102,241,.12);  color: var(--border-focus); }
+.qc-tags { display: flex; gap: 3px; flex-shrink: 0; }
+.qc-tag { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; padding: 2px 6px; border-radius: var(--radius-sm); background: var(--bg); color: var(--text-2); font-weight: 500; border: 1px solid var(--border); }
+.qc-tag.priority-low    { border-color: var(--priority-low);    color: var(--priority-low); }
+.qc-tag.priority-medium { border-color: var(--priority-medium); color: var(--priority-medium); }
+.qc-tag.priority-high   { border-color: var(--priority-high);   color: var(--priority-high); }
+.qc-tag.priority-urgent { border-color: var(--priority-urgent); color: var(--priority-urgent); }
+.qc-tag.due             { border-color: var(--border-focus);    color: var(--border-focus); }
 
 /* ===== Command Palette (Ctrl+K / で開くタスク検索) ===== */
-#cmd-palette { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; justify-content: center; align-items: flex-start; padding-top: 100px; z-index: 200; }
+#cmd-palette { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; justify-content: center; align-items: flex-start; padding-top: 80px; z-index: 200; }
 #cmd-palette.hidden { display: none; }
-.cmd-box { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); width: 600px; max-width: calc(100vw - 32px); max-height: 65vh; display: flex; flex-direction: column; overflow: hidden; }
-.cmd-input { padding: 14px 18px; border: none; outline: none; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 15px; }
-.cmd-list { flex: 1; overflow-y: auto; padding: 6px; }
-.cmd-result { padding: 9px 12px; border-radius: var(--radius); cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.cmd-box { background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); border: 1px solid var(--border); width: 560px; max-width: calc(100vw - 32px); max-height: 60vh; display: flex; flex-direction: column; overflow: hidden; }
+.cmd-input { padding: 12px 16px; border: none; outline: none; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; }
+.cmd-list { flex: 1; overflow-y: auto; padding: 4px; }
+.cmd-result { padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .cmd-result.highlighted { background: var(--surface-hover); }
-.cmd-result-priority { width: 4px; height: 18px; border-radius: 2px; flex-shrink: 0; }
+.cmd-result-priority { width: 3px; height: 16px; border-radius: 2px; flex-shrink: 0; }
 .cmd-result-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .cmd-result-title.done { color: var(--text-3); text-decoration: line-through; }
-.cmd-result-meta { font-size: 11px; color: var(--text-3); display: flex; gap: 6px; flex-shrink: 0; }
-.cmd-result-col { padding: 1px 7px; border-radius: 8px; background: var(--bg); }
-.cmd-result-due { font-weight: 600; }
+.cmd-result-meta { font-size: 11px; color: var(--text-3); display: flex; gap: 5px; flex-shrink: 0; }
+.cmd-result-col { padding: 1px 6px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); }
+.cmd-result-due { font-weight: 500; }
 .cmd-result-due.overdue { color: #dc2626; }
 .cmd-empty { padding: 28px; text-align: center; color: var(--text-3); font-size: 13px; }
-.cmd-footer { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-3); display: flex; gap: 12px; justify-content: flex-end; align-items: center; }
+.cmd-footer { padding: 6px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-3); display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
 
 /* ===== Stats Widget (ツールバー右の「今日完了」表示) ===== */
-#stats-widget { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: linear-gradient(135deg, rgba(99,102,241,.10), rgba(16,185,129,.10)); border-radius: 14px; font-size: 12px; font-weight: 600; color: var(--text-2); cursor: default; user-select: none; }
-.stats-num { color: var(--border-focus); font-weight: 700; }
-.stats-sep { color: var(--text-3); }
+#stats-widget { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-3); cursor: default; user-select: none; }
+.stats-num { color: var(--text-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats-sep { color: var(--border); }
 
 /* ===== Subtasks (モーダル内のチェックリスト) ===== */
 .subtasks-list { display: flex; flex-direction: column; gap: 2px; }
@@ -559,26 +557,8 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
 .task-progress.complete .task-progress-fill { background: #10b981; }
 .task-progress.complete { color: #10b981; }
 
-/* ===== Completion Celebration (タスクをDoneに移動した時の演出) ===== */
-@keyframes celebrate-pop {
-  0%   { transform: scale(0)   rotate(-15deg); opacity: 0; }
-  60%  { transform: scale(1.3) rotate(5deg);   opacity: 1; }
-  100% { transform: scale(1)   rotate(0);      opacity: 1; }
-}
-@keyframes celebrate-fade {
-  0%, 65% { opacity: 1; }
-  100%    { opacity: 0; transform: scale(0.85) translateY(-10px); }
-}
-@keyframes confetti-fly {
-  0%   { transform: translate(0,0) rotate(0deg)         scale(1);   opacity: 1; }
-  100% { transform: translate(var(--dx), var(--dy)) rotate(var(--rot)) scale(.5); opacity: 0; }
-}
-.celebration { position: fixed; pointer-events: none; z-index: 300; width: 0; height: 0; }
-.celebration-check { position: absolute; left: -32px; top: -32px; width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #10b981, #059669); color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 800; box-shadow: 0 8px 28px rgba(16,185,129,.5); animation: celebrate-pop .45s ease-out, celebrate-fade 1.1s ease-out .35s forwards; }
-.confetti { position: absolute; width: 9px; height: 9px; border-radius: 2px; animation: confetti-fly 1.1s ease-out forwards; }
-
-/* ===== Done Column Highlight (最終カラムのほのかな緑) ===== */
-.column.is-done .col-header { background: linear-gradient(180deg, rgba(16,185,129,.06), transparent); }
+/* ===== カレンダーミニカード フォーカス ===== */
+.cal-task-card:focus { outline: 2px solid var(--border-focus); outline-offset: 1px; border-radius: var(--radius-sm); }
 
 .hidden { display: none !important; }
   </style>
@@ -591,18 +571,19 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
     <span id="board-title" contenteditable spellcheck="false">Task Station</span>
     <div class="toolbar-sep"></div>
     <div class="view-toggle">
-      <button class="view-btn active" data-view="kanban">📋 カンバン</button>
-      <button class="view-btn" data-view="calendar">📅 カレンダー</button>
+      <button class="view-btn active" data-view="kanban">カンバン</button>
+      <button class="view-btn" data-view="calendar">カレンダー</button>
     </div>
     <button id="add-col-btn">＋ カラム追加</button>
     <div class="toolbar-right">
       <div id="stats-widget" title="今日 Done に移動したタスク数 / 全タスク数">
-        <span>🔥 今日</span><span class="stats-num" id="stats-done">0</span>
+        <span>今日</span><span class="stats-num" id="stats-done">0</span>
         <span class="stats-sep">/</span>
-        <span>📋 全 <span class="stats-num" id="stats-total">0</span></span>
+        <span>全</span><span class="stats-num" id="stats-total">0</span>
       </div>
-      <button id="export-btn" class="toolbar-btn" title="エクスポート">↓ 書き出し</button>
-      <button id="import-btn" class="toolbar-btn" title="インポート">↑ 読み込み</button>
+      <div class="toolbar-sep"></div>
+      <button id="export-btn" class="toolbar-btn" title="エクスポート">書き出し</button>
+      <button id="import-btn" class="toolbar-btn" title="インポート">読み込み</button>
       <button id="help-btn" class="icon-btn" title="ショートカット一覧 (?)">?</button>
     </div>
   </header>
@@ -621,7 +602,7 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
 
 <!-- Quick Capture (Q キーで開くタスク高速入力バー) -->
 <div id="quick-capture">
-  <span class="qc-icon">⚡</span>
+  <span class="qc-icon">+</span>
   <input id="qc-input" class="qc-input" type="text" placeholder="タスクを入力…  !1〜5 で優先度  @0521 で期限" autocomplete="off">
   <div class="qc-tags" id="qc-tags"></div>
   <span class="qc-hint">Enter</span>
@@ -630,7 +611,7 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
 <!-- Command Palette (Ctrl+K / で開くタスク検索) -->
 <div id="cmd-palette" class="hidden" role="dialog" aria-modal="true">
   <div class="cmd-box">
-    <input id="cmd-input" class="cmd-input" type="text" placeholder="🔍 タスクを検索… (タイトル・詳細から探す)" autocomplete="off">
+    <input id="cmd-input" class="cmd-input" type="text" placeholder="タスクを検索… (タイトル・詳細から探す)" autocomplete="off">
     <div id="cmd-list" class="cmd-list"></div>
     <div class="cmd-footer">
       <span><kbd>↑↓</kbd> 移動</span>
@@ -739,6 +720,8 @@ kbd { display: inline-flex; align-items: center; padding: 2px 7px; background: v
         <div class="shortcut-section">カレンダービュー</div>
         <div class="shortcut-row"><span class="shortcut-desc">前月 / 翌月</span><kbd>H</kbd> <kbd>L</kbd></div>
         <div class="shortcut-row"><span class="shortcut-desc">セルに新規タスク</span><kbd>N</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスク期限 ±1日</span><kbd>←</kbd> <kbd>→</kbd></div>
+        <div class="shortcut-row"><span class="shortcut-desc">タスク期限 ±7日</span><kbd>↑</kbd> <kbd>↓</kbd></div>
         <div class="shortcut-section">モーダル内</div>
         <div class="shortcut-row"><span class="shortcut-desc">タスク登録</span><kbd>Ctrl Enter</kbd></div>
         <div class="shortcut-row"><span class="shortcut-desc">閉じる</span><kbd>Esc</kbd></div>
@@ -1132,8 +1115,8 @@ class BoardView {
       progressHtml = `<div class="task-progress${complete ? ' complete' : ''}"><span>${complete ? '✓ ' : ''}${done}/${total}</span><div class="task-progress-bar"><div class="task-progress-fill" style="width:${pct}%"></div></div></div>`;
     }
     const icons = [
-      task.links?.length ? `<span class="task-badge">🔗 ${task.links.length}</span>` : '',
-      task.attachments?.length ? `<span class="task-badge">📎 ${task.attachments.length}</span>` : '',
+      task.links?.length ? `<span class="task-badge" title="${task.links.length}件のリンク">↗${task.links.length}</span>` : '',
+      task.attachments?.length ? `<span class="task-badge" title="${task.attachments.length}件の添付">◫${task.attachments.length}</span>` : '',
     ].join('');
     el.innerHTML = `
       <div class="task-priority-bar" style="background:${pColor}"></div>
@@ -1318,11 +1301,34 @@ class CalendarView {
       const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
       el.style.borderLeftColor = safeColor;
     }
-    const DOTS = { low: '🔵', medium: '🟡', high: '🟠', urgent: '🔴' };
-    const dot = DOTS[task.priority] || '';
-    el.innerHTML = `<span class="cal-card-title">${this._esc(task.title)}</span>${dot ? `<span class="cal-card-priority">${dot}</span>` : ''}`;
+    const PC = { low: 'var(--priority-low)', medium: 'var(--priority-medium)', high: 'var(--priority-high)', urgent: 'var(--priority-urgent)' };
+    const dotColor = PC[task.priority];
+    const dotHtml = dotColor ? `<span class="cal-card-priority" style="color:${dotColor}">●</span>` : '';
+    el.innerHTML = `<span class="cal-card-title">${this._esc(task.title)}</span>${dotHtml}`;
     el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', task.id); e.dataTransfer.effectAllowed = 'move'; });
     el.addEventListener('click', e => { e.stopPropagation(); window.modal.openEdit(task.id); });
+    // キーボードで期限日を変更する: ←→ で±1日、↑↓ で±7日
+    el.addEventListener('keydown', async e => {
+      let deltaDays = 0;
+      if (e.key === 'ArrowLeft')  deltaDays = -1;
+      else if (e.key === 'ArrowRight') deltaDays = 1;
+      else if (e.key === 'ArrowUp')    deltaDays = -7;
+      else if (e.key === 'ArrowDown')  deltaDays = 7;
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.modal.openEdit(task.id); return; }
+      if (deltaDays !== 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        const base = task.dueDate ? new Date(task.dueDate) : new Date();
+        base.setDate(base.getDate() + deltaDays);
+        base.setHours(12, 0, 0, 0);
+        await this.store.updateTask(task.id, { dueDate: base.getTime() });
+        // 再描画後に移動先カードへフォーカスを移す
+        requestAnimationFrame(() => {
+          const moved = document.querySelector(`.cal-task-card[data-task-id="${task.id}"]`);
+          moved?.focus();
+        });
+      }
+    });
     return el;
   }
 
@@ -2151,38 +2157,6 @@ class KeyboardManager {
   const boardSection = document.getElementById('board-view');
   const calSection = document.getElementById('calendar-view');
 
-  /**
-   * タスク完了演出: チェックマーク + 紙吹雪
-   * 指定座標を中心に CSS アニメーションを生成し、1秒後に DOM から削除する
-   */
-  function celebrate(cx, cy) {
-    const wrap = document.createElement('div');
-    wrap.className = 'celebration';
-    wrap.style.left = cx + 'px';
-    wrap.style.top = cy + 'px';
-    const check = document.createElement('div');
-    check.className = 'celebration-check';
-    check.textContent = '✓';
-    wrap.appendChild(check);
-    // 紙吹雪 16粒を放射状に飛ばす
-    const colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
-    for (let i = 0; i < 18; i++) {
-      const c = document.createElement('div');
-      c.className = 'confetti';
-      c.style.background = colors[i % colors.length];
-      c.style.left = '-4px';
-      c.style.top = '-4px';
-      const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.5;
-      const dist = 70 + Math.random() * 50;
-      c.style.setProperty('--dx', `${Math.cos(angle) * dist}px`);
-      c.style.setProperty('--dy', `${Math.sin(angle) * dist + 90}px`);
-      c.style.setProperty('--rot', `${Math.random() * 720 - 360}deg`);
-      wrap.appendChild(c);
-    }
-    document.body.appendChild(wrap);
-    setTimeout(() => wrap.remove(), 1200);
-  }
-
   /** ツールバーの統計ウィジェットを更新する (今日完了数 / 全タスク数) */
   function updateStats() {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
@@ -2204,17 +2178,6 @@ class KeyboardManager {
   store.on('changed',       () => { if (store.state.view === 'kanban') boardView.render(); else calView.render(); updateStats(); });
   store.on('viewChanged',   view => applyView(view));
   store.on('calNavChanged', () => calView.render());
-  // Done カラム到達時に演出を表示する
-  store.on('taskCompleted', ({ taskId }) => {
-    // 次フレームで DOM が更新されてからカードの位置を取得
-    requestAnimationFrame(() => {
-      const card = document.querySelector(`[data-task-id="${taskId}"]`);
-      if (card) {
-        const r = card.getBoundingClientRect();
-        celebrate(r.left + r.width / 2, r.top + r.height / 2);
-      }
-    });
-  });
   store.on('selectionChanged', () => {
     document.querySelectorAll('.task-card').forEach(el => {
       el.classList.toggle('selected', el.dataset.taskId === store.state.selectedTaskId);
