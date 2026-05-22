@@ -325,16 +325,15 @@ input, textarea { font: inherit; color: inherit; }
   transition: background var(--transition);
 }
 .cal-nav-btn:hover { background: var(--surface-hover); }
-.cal-day-labels { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+.cal-day-labels { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 4px; }
 .cal-day-label { text-align: center; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 4px 0; }
-.cal-day-label.sat { color: var(--cal-sat); }
-.cal-day-label.sun { color: var(--cal-sun); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-day-label.fri { color: var(--cal-fri); }
+.cal-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 .cal-cell {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  min-height: 120px;
+  min-height: 100px;
   padding: 6px;
   position: relative;
   transition: background var(--transition), border-color var(--transition);
@@ -344,8 +343,6 @@ input, textarea { font: inherit; color: inherit; }
 .cal-cell:hover .cal-add-btn { opacity: 1; }
 .cal-cell.drag-over { background: rgba(99,102,241,.06); border-color: var(--border-focus); }
 .cal-cell.cal-today { background: rgba(99,102,241,.04); border-color: var(--border-focus); }
-.cal-cell.cal-sat .cal-date-num { color: var(--cal-sat); }
-.cal-cell.cal-sun .cal-date-num { color: var(--cal-sun); }
 .cal-cell.cal-fri .cal-date-num { color: var(--cal-fri); }
 .cal-blank { background: transparent; border-color: transparent; }
 .cal-date-num { font-size: 13px; font-weight: 600; color: var(--text-2); line-height: 1; margin-bottom: 4px; }
@@ -400,6 +397,50 @@ input, textarea { font: inherit; color: inherit; }
 .cal-nodue-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 36px; padding: 6px; border-radius: var(--radius); transition: background var(--transition); }
 .cal-nodue-list .cal-task-card { white-space: nowrap; min-width: 80px; }
 .cal-nodue-list.drag-over { background: rgba(99,102,241,.06); }
+
+/* ===== 完了実績グラフ (GitHub contribution 風) ===== */
+.contrib-section {
+  margin-top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+}
+.contrib-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.contrib-title { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.contrib-legend { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-3); }
+.contrib-legend-cell { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--border); }
+.contrib-wrapper { display: flex; gap: 6px; align-items: flex-start; overflow-x: auto; }
+.contrib-slot-labels { display: flex; flex-direction: column; padding-top: 22px; gap: 3px; flex-shrink: 0; }
+.contrib-slot-label { height: 20px; font-size: 10px; color: var(--text-3); display: flex; align-items: center; width: 18px; }
+.contrib-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.contrib-dates { display: flex; gap: 3px; margin-bottom: 1px; }
+.contrib-date-group { display: flex; gap: 3px; }
+.contrib-date-group + .contrib-date-group { margin-left: 8px; }
+.contrib-date {
+  width: 28px; flex-shrink: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 20px;
+  white-space: nowrap;
+}
+.contrib-date.is-today { color: var(--border-focus); font-weight: 700; }
+.contrib-row { display: flex; gap: 3px; }
+.contrib-row-group { display: flex; gap: 3px; }
+.contrib-row-group + .contrib-row-group { margin-left: 8px; }
+.contrib-cell {
+  width: 28px; height: 20px; flex-shrink: 0;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: default;
+  transition: filter .1s;
+}
+.contrib-cell:hover { filter: brightness(0.88); }
+.contrib-cell.lv0 { background: var(--bg); }
+.contrib-cell.lv1 { background: rgba(99,102,241,.2);  border-color: rgba(99,102,241,.25); }
+.contrib-cell.lv2 { background: rgba(99,102,241,.5);  border-color: rgba(99,102,241,.5); }
+.contrib-cell.lv3 { background: rgba(99,102,241,.8);  border-color: rgba(99,102,241,.7); }
 
 /* ===== Modal ===== */
 .modal {
@@ -1102,14 +1143,19 @@ class BoardView {
 
   /** カラム要素を生成して返す */
   _renderColumn(col) {
-    const tasks = this.store.getColumnTasks(col.id);
+    const lastColId = this.store.board?.columnOrder[this.store.board.columnOrder.length - 1];
+    const isLastCol = col.id === lastColId;
+    let tasks = this.store.getColumnTasks(col.id);
+    // Doneカラム: 当日完了分のみ表示。翌日になると自動で非表示になる
+    if (isLastCol) {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      tasks = tasks.filter(t => !t.completedAt || t.completedAt >= todayStart.getTime());
+    }
     const el = document.createElement('div');
     el.className = 'column';
     el.dataset.colId = col.id;
     if (col.id === this.store.state.focusedColumnId) el.classList.add('focused');
-    // 最終カラム (Done) には淡い緑のヘッダー装飾を付ける
-    const lastColId = this.store.board?.columnOrder[this.store.board.columnOrder.length - 1];
-    if (col.id === lastColId) el.classList.add('is-done');
+    if (isLastCol) el.classList.add('is-done');
     const wipLabel = col.wipLimit
       ? `<span class="wip-badge ${tasks.length >= col.wipLimit ? 'wip-over' : ''}">${tasks.length}/${col.wipLimit}</span>`
       : `<span class="task-count">${tasks.length}</span>`;
@@ -1257,6 +1303,7 @@ class CalendarView {
     this.container.appendChild(this._renderDayLabels());
     this.container.appendChild(this._renderGrid(year, month));
     this.container.appendChild(this._renderNodue());
+    this.container.appendChild(this._renderContribution());
   }
 
   /** 月ナビゲーションヘッダーを生成する */
@@ -1269,35 +1316,40 @@ class CalendarView {
     return el;
   }
 
-  /** 曜日ラベル行を生成する (月曜始まり) */
+  /** 曜日ラベル行を生成する (月〜金のみ) */
   _renderDayLabels() {
     const el = document.createElement('div');
     el.className = 'cal-day-labels';
-    ['月', '火', '水', '木', '金', '土', '日'].forEach((d, i) => {
+    ['月', '火', '水', '木', '金'].forEach((d, i) => {
       const span = document.createElement('div');
-      span.className = 'cal-day-label' + (i === 5 ? ' sat' : i === 6 ? ' sun' : '');
+      span.className = 'cal-day-label' + (i === 4 ? ' fri' : '');
       span.textContent = d;
       el.appendChild(span);
     });
     return el;
   }
 
-  /** 月グリッドを生成する */
+  /** 月グリッドを生成する (月〜金のみ。ReviewとDoneのタスクは非表示) */
   _renderGrid(year, month) {
     const grid = document.createElement('div');
     grid.className = 'cal-grid';
     const firstDay = new Date(year, month - 1, 1);
     const lastDay = new Date(year, month, 0);
-    // 月曜始まりの空白セルを先頭に追加 (日曜=0→6、月曜=1→0 と変換)
-    const startDow = (firstDay.getDay() + 6) % 7;
-    for (let i = 0; i < startDow; i++) { const b = document.createElement('div'); b.className = 'cal-cell cal-blank'; grid.appendChild(b); }
+    // 月曜始まりの空白セル: startDow が週末なら 0 (月曜から始める)
+    const startDow = (firstDay.getDay() + 6) % 7; // 0=月..6=日
+    const blankCells = startDow < 5 ? startDow : 0;
+    for (let i = 0; i < blankCells; i++) { const b = document.createElement('div'); b.className = 'cal-cell cal-blank'; grid.appendChild(b); }
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const allTasks = this.store.getAllTasks();
+    // 後ろ2カラム (Review / Done) のタスクは表示しない
+    const colOrder = this.store.board?.columnOrder || [];
+    const hiddenColIds = new Set(colOrder.slice(-2));
+    const allTasks = this.store.getAllTasks().filter(t => !hiddenColIds.has(t.columnId));
     for (let d = 1; d <= lastDay.getDate(); d++) {
       const date = new Date(year, month - 1, d); date.setHours(0, 0, 0, 0);
+      const dow = (date.getDay() + 6) % 7; // 0=月..6=日
+      if (dow >= 5) continue; // 土日はスキップ
       const dayTasks = allTasks.filter(t => { if (!t.dueDate) return false; const dd = new Date(t.dueDate); return dd.getFullYear() === year && dd.getMonth() === month - 1 && dd.getDate() === d; });
       const isToday = date.getTime() === today.getTime();
-      const dow = (date.getDay() + 6) % 7;
       grid.appendChild(this._renderDayCell(d, date, dayTasks, isToday, dow));
     }
     return grid;
@@ -1306,7 +1358,7 @@ class CalendarView {
   /** 1日分のセルを生成する */
   _renderDayCell(day, date, tasks, isToday, dow) {
     const el = document.createElement('div');
-    el.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (dow === 4 ? ' cal-fri' : '') + (dow === 5 ? ' cal-sat' : '') + (dow === 6 ? ' cal-sun' : '');
+    el.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (dow === 4 ? ' cal-fri' : '');
     el.tabIndex = 0;
     const numEl = document.createElement('div');
     numEl.className = 'cal-date-num';
@@ -1375,9 +1427,11 @@ class CalendarView {
     return el;
   }
 
-  /** 期限なしタスク一覧エリアを生成する */
+  /** 期限なしタスク一覧エリアを生成する (ReviewとDoneは非表示) */
   _renderNodue() {
-    const tasks = this.store.getAllTasks().filter(t => !t.dueDate);
+    const colOrder = this.store.board?.columnOrder || [];
+    const hiddenColIds = new Set(colOrder.slice(-2));
+    const tasks = this.store.getAllTasks().filter(t => !t.dueDate && !hiddenColIds.has(t.columnId));
     const el = document.createElement('div');
     el.className = 'cal-nodue';
     const titleEl = document.createElement('div');
@@ -1402,6 +1456,116 @@ class CalendarView {
     if (month < 1) { month = 12; year--; }
     if (month > 12) { month = 1; year++; }
     this.store.setCalendarNav(year, month);
+  }
+
+  /**
+   * 直近2週間 (平日10日) のタスク完了実績グラフを生成する
+   * 各日を朝/昼/夕/夜の4スロットに分け、completedAt でカウントする
+   */
+  _renderContribution() {
+    const section = document.createElement('div');
+    section.className = 'contrib-section';
+    const workdays = this._getLastWorkdays(10); // 直近10平日
+    // completedAt を持つ全タスク (ボードから非表示のものも含む)
+    const doneTasks = this.store.state.tasks.filter(t => t.completedAt);
+    const slots = [
+      { label: '朝', start: 5,  end: 12 },
+      { label: '昼', start: 12, end: 18 },
+      { label: '夕', start: 18, end: 22 },
+      { label: '夜', start: 22, end: 5  }, // 深夜またぎ
+    ];
+    const week1 = workdays.slice(0, 5);
+    const week2 = workdays.slice(5, 10);
+    // ヘッダー
+    const header = document.createElement('div');
+    header.className = 'contrib-header';
+    header.innerHTML = `
+      <span class="contrib-title">直近2週間の完了実績</span>
+      <span class="contrib-legend">
+        <span>少</span>
+        <div class="contrib-legend-cell lv0"></div>
+        <div class="contrib-legend-cell lv1"></div>
+        <div class="contrib-legend-cell lv2"></div>
+        <div class="contrib-legend-cell lv3"></div>
+        <span>多</span>
+      </span>`;
+    section.appendChild(header);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'contrib-wrapper';
+    // 行ラベル (朝/昼/夕/夜)
+    const slotLabels = document.createElement('div');
+    slotLabels.className = 'contrib-slot-labels';
+    slotLabels.innerHTML = '<div class="contrib-slot-label"></div>' + // 日付行の高さ合わせ
+      slots.map(s => `<div class="contrib-slot-label">${s.label}</div>`).join('');
+    wrapper.appendChild(slotLabels);
+    // メイングリッド (日付行 + 4スロット行)
+    const main = document.createElement('div');
+    main.className = 'contrib-main';
+    // 日付行
+    const dateRow = document.createElement('div');
+    dateRow.className = 'contrib-dates';
+    [week1, week2].forEach((week, wi) => {
+      const grp = document.createElement('div');
+      grp.className = 'contrib-date-group';
+      week.forEach(d => {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const isToday = d.getTime() === today.getTime();
+        const div = document.createElement('div');
+        div.className = 'contrib-date' + (isToday ? ' is-today' : '');
+        div.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
+        grp.appendChild(div);
+      });
+      dateRow.appendChild(grp);
+    });
+    main.appendChild(dateRow);
+    // スロット行 × 4
+    slots.forEach(slot => {
+      const row = document.createElement('div');
+      row.className = 'contrib-row';
+      [week1, week2].forEach((week, wi) => {
+        const grp = document.createElement('div');
+        grp.className = 'contrib-row-group';
+        week.forEach(d => {
+          const count = this._countInSlot(doneTasks, d, slot);
+          const lv = count === 0 ? 'lv0' : count === 1 ? 'lv1' : count <= 3 ? 'lv2' : 'lv3';
+          const cell = document.createElement('div');
+          cell.className = `contrib-cell ${lv}`;
+          cell.title = `${d.getMonth()+1}/${d.getDate()} ${slot.label}: ${count}件完了`;
+          grp.appendChild(cell);
+        });
+        row.appendChild(grp);
+      });
+      main.appendChild(row);
+    });
+    wrapper.appendChild(main);
+    section.appendChild(wrapper);
+    return section;
+  }
+
+  /** 直近 n 平日 (月〜金) を古い順で返す */
+  _getLastWorkdays(n) {
+    const days = [];
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    while (days.length < n) {
+      const dow = d.getDay();
+      if (dow !== 0 && dow !== 6) days.unshift(new Date(d));
+      d.setDate(d.getDate() - 1);
+    }
+    return days;
+  }
+
+  /** 指定日の指定スロットで completedAt が該当するタスク数を返す */
+  _countInSlot(tasks, day, slot) {
+    const dayStart = day.getTime();
+    const dayEnd = dayStart + 86400000;
+    return tasks.filter(t => {
+      const ts = t.completedAt;
+      if (!ts || ts < dayStart || ts >= dayEnd) return false;
+      const h = new Date(ts).getHours();
+      return slot.start < slot.end
+        ? (h >= slot.start && h < slot.end)
+        : (h >= slot.start || h < slot.end); // 深夜またぎ (夜スロット)
+    }).length;
   }
 
   /** HTML エスケープ (XSS 対策) */
