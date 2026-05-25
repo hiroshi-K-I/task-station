@@ -1157,7 +1157,8 @@ class BoardView {
     const lastColId = this.store.board?.columnOrder[this.store.board.columnOrder.length - 1];
     const isLastCol = col.id === lastColId;
     let tasks = this.store.getColumnTasks(col.id);
-    // Doneカラム: 当日完了分のみ表示。翌日になると自動で非表示になる
+    // Done カラム: 翌日を過ぎたタスクを自動的に非表示にする。
+    // completedAt がない場合は当日作成とみなして表示し続ける (直接 Done に作ったタスク対策)
     if (isLastCol) {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       tasks = tasks.filter(t => !t.completedAt || t.completedAt >= todayStart.getTime());
@@ -1304,7 +1305,10 @@ class CalendarView {
   constructor(store) {
     this.store = store;
     this.container = document.getElementById('calendar-container');
-    this._cellOffsets = {}; // dateKey → scroll offset for cycling hidden tasks
+    // { "YYYY-M-D" → startIndex } — どのタスクからセルに表示するか (>3件の日用)
+    this._cellOffsets = {};
+    // 現在開いているコンテキストメニューのクリーンアップ関数 (リーク防止)
+    this._ctxCleanup = null;
   }
 
   /** カレンダー全体を再描画する */
@@ -1367,7 +1371,12 @@ class CalendarView {
     return grid;
   }
 
-  /** 1日分のセルを生成する */
+  /**
+   * 1日分のカレンダーセルを生成する。
+   * tasks が maxShow(3) 件を超える場合は ↑N件/↓N件 インジケーターを表示し、
+   * Ctrl/Alt+↑↓ または インジケータークリックで表示するタスクをスクロールできる。
+   * スクロール位置は _cellOffsets に保持され、月を跨いでも維持される。
+   */
   _renderDayCell(day, date, tasks, isToday, dow) {
     const el = document.createElement('div');
     el.className = 'cal-cell' + (isToday ? ' cal-today' : '') + (dow === 4 ? ' cal-fri' : '');
@@ -1421,92 +1430,153 @@ class CalendarView {
     return el;
   }
 
-  /** カレンダー上のミニタスクカードを生成する */
+  /**
+   * カレンダーグリッド上に表示する 1タスク分のミニカードを生成する。
+   * - クリック: 編集モーダルを開く
+   * - 右クリック: コンテキストメニュー (前日/翌日/±1週/クリア/編集)
+   * - ←→ (フォーカス時): 期限を ±1 平日移動 (土日はスキップ)
+   * - ↑↓ (フォーカス時): 期限を ±7 日移動
+   * - Ctrl/Alt+↑↓: 親セルの hidden タスク送り/戻しへ伝播
+   * - ドラッグ: セルへのドロップで期限変更
+   */
   _renderMiniCard(task) {
     const el = document.createElement('div');
     el.className = 'cal-task-card';
     el.dataset.taskId = task.id;
     el.draggable = true;
     el.tabIndex = 0;
-    const col = this.store.state.columns.find(c => c.id === task.columnId);
+    el.title = '←→: ±1平日  ↑↓: ±7日  右クリック: メニュー  Enter: 編集';
+
     // XSS対策: カラム色は hex 形式のみ許可
+    const col = this.store.state.columns.find(c => c.id === task.columnId);
     if (col) {
       const safeColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
       el.style.borderLeftColor = safeColor;
     }
+
     const PC = { low: 'var(--priority-low)', medium: 'var(--priority-medium)', high: 'var(--priority-high)', urgent: 'var(--priority-urgent)' };
     const dotColor = PC[task.priority];
     const dotHtml = dotColor ? `<span class="cal-card-priority" style="color:${dotColor}">●</span>` : '';
     el.innerHTML = `<span class="cal-card-title">${this._esc(task.title)}</span>${dotHtml}`;
+
     el.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', task.id); e.dataTransfer.effectAllowed = 'move'; });
     el.addEventListener('click', e => { e.stopPropagation(); window.modal.openEdit(task.id); });
     el.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); this._showContextMenu(task, e.clientX, e.clientY); });
-    // キーボードで期限日を変更する: ←→ で±1日、↑↓ で±7日 / Ctrl+↑↓ はセルへ伝播
+
+    // キーボード操作: ←→ で±1平日、↑↓ で±7日。Ctrl/Alt+↑↓ は親セルへ伝播させる
     el.addEventListener('keydown', async e => {
+      // Ctrl/Alt+↑↓ は _renderDayCell のセルハンドラ (タスク送り/戻し) に委ねる
       if ((e.ctrlKey || e.altKey) && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) return;
+
       let deltaDays = 0;
-      if (e.key === 'ArrowLeft')  deltaDays = -1;
+      if      (e.key === 'ArrowLeft')  deltaDays = -1;
       else if (e.key === 'ArrowRight') deltaDays = 1;
       else if (e.key === 'ArrowUp')    deltaDays = -7;
       else if (e.key === 'ArrowDown')  deltaDays = 7;
       else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); window.modal.openEdit(task.id); return; }
+
       if (deltaDays !== 0) {
         e.preventDefault();
         e.stopPropagation();
         const base = task.dueDate ? new Date(task.dueDate) : new Date();
         base.setDate(base.getDate() + deltaDays);
         base.setHours(12, 0, 0, 0);
+        // ±1日移動で土日に着地した場合は最寄りの平日へ自動スキップ
+        if (Math.abs(deltaDays) === 1) this._skipToWorkday(base, deltaDays > 0);
         await this.store.updateTask(task.id, { dueDate: base.getTime() });
+        // 再描画後に移動先のカードへフォーカスを戻す
         requestAnimationFrame(() => {
-          const moved = document.querySelector(`.cal-task-card[data-task-id="${task.id}"]`);
-          moved?.focus();
+          document.querySelector(`.cal-task-card[data-task-id="${task.id}"]`)?.focus();
         });
       }
     });
     return el;
   }
 
-  /** カード右クリックメニューを表示する */
+  /**
+   * カード右クリック時に表示するコンテキストメニュー。
+   * 前回のメニューが開いていれば先にクリーンアップして listeners を解放する。
+   */
   _showContextMenu(task, x, y) {
-    document.querySelector('.card-ctx-menu')?.remove();
+    // 既存メニューの DOM + listeners を一括解放
+    this._ctxCleanup?.();
+    this._ctxCleanup = null;
+
     const menu = document.createElement('div');
     menu.className = 'card-ctx-menu';
+    // visibility: hidden で測定用に配置してからポジション補正する
+    menu.style.visibility = 'hidden';
+    menu.style.left = x + 'px';
+    menu.style.top  = y + 'px';
+
     const items = [
-      { label: '前日へ',     delta: -1 },
-      { label: '翌日へ',     delta:  1 },
-      { label: '+1週間',     delta:  7 },
-      { label: '−1週間',    delta: -7 },
+      { label: '前日へ (←)',     delta: -1 },
+      { label: '翌日へ (→)',     delta:  1 },
+      { label: '+1週間 (↓)',     delta:  7 },
+      { label: '−1週間 (↑)',    delta: -7 },
       null,
-      { label: '期限をクリア', action: 'clear' },
-      { label: '編集...',    action: 'edit'  },
+      { label: '期限をクリア',   action: 'clear' },
+      { label: '編集...',        action: 'edit'  },
     ];
+
     items.forEach(item => {
       if (!item) { const sep = document.createElement('div'); sep.className = 'card-ctx-sep'; menu.appendChild(sep); return; }
       const row = document.createElement('div');
       row.className = 'card-ctx-item';
       row.textContent = item.label;
       row.addEventListener('click', async () => {
-        menu.remove();
+        this._ctxCleanup?.();
+        this._ctxCleanup = null;
         if (item.action === 'edit')  { window.modal.openEdit(task.id); return; }
         if (item.action === 'clear') { await this.store.updateTask(task.id, { dueDate: null }); return; }
         const base = task.dueDate ? new Date(task.dueDate) : new Date();
         base.setDate(base.getDate() + item.delta);
         base.setHours(12, 0, 0, 0);
+        // ±1日移動で土日に着地した場合は最寄りの平日へ
+        if (Math.abs(item.delta) === 1) this._skipToWorkday(base, item.delta > 0);
         await this.store.updateTask(task.id, { dueDate: base.getTime() });
       });
       menu.appendChild(row);
     });
+
     document.body.appendChild(menu);
+
+    // 初期位置を測定してからビューポート外にはみ出す場合は補正する
     const mr = menu.getBoundingClientRect();
     let left = x, top = y;
-    if (left + mr.width  > window.innerWidth)  left = window.innerWidth  - mr.width  - 4;
-    if (top  + mr.height > window.innerHeight) top  = y - mr.height;
+    if (left + mr.width  > window.innerWidth)  left = Math.max(0, window.innerWidth  - mr.width  - 6);
+    if (top  + mr.height > window.innerHeight) top  = Math.max(0, y - mr.height);
     menu.style.left = left + 'px';
     menu.style.top  = top  + 'px';
-    const dismiss    = e => { if (!menu.contains(e.target)) { menu.remove(); off(); } };
-    const dismissKey = e => { if (e.key === 'Escape') { menu.remove(); off(); } };
-    const off = () => { document.removeEventListener('click', dismiss, true); document.removeEventListener('keydown', dismissKey); };
-    setTimeout(() => { document.addEventListener('click', dismiss, true); document.addEventListener('keydown', dismissKey); }, 0);
+    menu.style.visibility = '';
+
+    // クリックアウト / Escape でメニューを閉じる (capture phase で先に捕捉)
+    const dismiss    = e => { if (!menu.contains(e.target)) off(); };
+    const dismissKey = e => { if (e.key === 'Escape') off(); };
+    const off = () => {
+      menu.remove();
+      document.removeEventListener('click',   dismiss,    true);
+      document.removeEventListener('keydown', dismissKey, false);
+      if (this._ctxCleanup === off) this._ctxCleanup = null;
+    };
+    this._ctxCleanup = off;
+    // setTimeout 0: contextmenu イベント自体が click に昇格するブラウザ対策
+    setTimeout(() => {
+      document.addEventListener('click',   dismiss,    true);
+      document.addEventListener('keydown', dismissKey, false);
+    }, 0);
+  }
+
+  /**
+   * date が土曜 (6) または日曜 (0) に着地していた場合、
+   * movedForward=true なら月曜へ、false なら金曜へスキップする。
+   * ±7日移動は常に同一曜日なのでこの関数は±1日のときだけ呼ぶ。
+   */
+  _skipToWorkday(date, movedForward) {
+    const dow = date.getDay();
+    if (dow === 6) date.setDate(date.getDate() + (movedForward ? 2 : -1)); // 土→月 or 土→金
+    else if (dow === 0) date.setDate(date.getDate() + (movedForward ? 1 : -2)); // 日→月 or 日→金
+    return date;
   }
 
   /** 期限なしタスク一覧エリアを生成する (ReviewとDoneは非表示) */
@@ -1548,8 +1618,9 @@ class CalendarView {
     const section = document.createElement('div');
     section.className = 'contrib-section';
     const workdays = this._getLastWorkdays(10); // 直近10平日
-    // completedAt を持つ全タスク (ボードから非表示のものも含む)
-    const doneTasks = this.store.state.tasks.filter(t => t.completedAt);
+    // 現在のボードのタスクのうち completedAt が設定されているものだけ集計する
+    // (他ボードのタスクが混入しないよう getAllTasks() 経由で取得)
+    const doneTasks = this.store.getAllTasks().filter(t => t.completedAt);
     const slots = [
       { label: '朝', start: 5,  end: 12 },
       { label: '昼', start: 12, end: 18 },
@@ -1583,17 +1654,16 @@ class CalendarView {
     // メイングリッド (日付行 + 4スロット行)
     const main = document.createElement('div');
     main.className = 'contrib-main';
-    // 日付行
+    // 日付行 — 今日のセルは強調表示 (is-today クラス)
     const dateRow = document.createElement('div');
     dateRow.className = 'contrib-dates';
-    [week1, week2].forEach((week, wi) => {
+    const todayTs = (() => { const t = new Date(); t.setHours(0, 0, 0, 0); return t.getTime(); })();
+    [week1, week2].forEach(week => {
       const grp = document.createElement('div');
       grp.className = 'contrib-date-group';
       week.forEach(d => {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const isToday = d.getTime() === today.getTime();
         const div = document.createElement('div');
-        div.className = 'contrib-date' + (isToday ? ' is-today' : '');
+        div.className = 'contrib-date' + (d.getTime() === todayTs ? ' is-today' : '');
         div.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
         grp.appendChild(div);
       });
