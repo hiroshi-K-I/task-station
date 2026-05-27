@@ -1,0 +1,2520 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Task Station</title>
+<style>
+:root {
+  --bg: #f6f8fa;
+  --bg-2: #ffffff;
+  --surface: #ffffff;
+  --border: #d0d7de;
+  --border-focus: #6366f1;
+  --text: #1f2328;
+  --text-2: #57606a;
+  --text-3: #818c99;
+  --priority-none: #d0d7de;
+  --priority-low: #0969da;
+  --priority-medium: #9a6700;
+  --priority-high: #bc4c00;
+  --priority-urgent: #cf222e;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --shadow: 0 1px 3px rgba(140,149,159,.12);
+  --shadow-md: 0 3px 8px rgba(140,149,159,.16);
+  --shadow-lg: 0 8px 24px rgba(140,149,159,.20);
+  --col-width: 280px;
+  --toolbar-h: 48px;
+  --transition: 0.1s ease;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --bg-2: #161b22;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-2: #7d8590;
+    --text-3: #484f58;
+    --priority-low: #388bfd;
+    --priority-medium: #d29922;
+    --priority-high: #db6d28;
+    --priority-urgent: #f85149;
+    --shadow: 0 1px 3px rgba(0,0,0,.3);
+    --shadow-md: 0 3px 8px rgba(0,0,0,.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,.5);
+  }
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans','Noto Sans JP',sans-serif;font-size:14px;line-height:1.5;background:var(--bg);color:var(--text)}
+button{cursor:pointer;font:inherit;border:none;background:none;color:inherit}
+input,textarea,select{font:inherit;color:inherit}
+a{color:var(--priority-low);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* Toolbar */
+#toolbar{
+  position:fixed;top:0;left:0;right:0;height:var(--toolbar-h);
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;padding:0 12px;z-index:100;
+}
+#board-title{
+  font-weight:600;font-size:15px;padding:2px 6px;border-radius:var(--radius-sm);
+  outline:none;min-width:60px;max-width:200px;
+  border:1px solid transparent;transition:border-color var(--transition);
+}
+#board-title:focus{border-color:var(--border-focus)}
+.tb-sep{width:1px;height:24px;background:var(--border);margin:0 4px}
+.tb-btn{
+  padding:4px 10px;border-radius:var(--radius);font-size:13px;
+  border:1px solid var(--border);background:var(--bg-2);color:var(--text);
+  transition:background var(--transition),border-color var(--transition);
+  white-space:nowrap;
+}
+.tb-btn:hover{background:var(--bg);border-color:var(--border-focus)}
+.tb-btn.active{background:var(--border-focus);color:#fff;border-color:var(--border-focus)}
+#stats{font-size:12px;color:var(--text-2);white-space:nowrap}
+.tb-spacer{flex:1}
+
+/* Main */
+#main{position:fixed;top:var(--toolbar-h);left:0;right:0;bottom:0;overflow:hidden}
+#columns-container{
+  display:flex;gap:12px;padding:12px;height:100%;overflow-x:auto;overflow-y:hidden;
+  align-items:flex-start;
+}
+
+/* Column */
+.column{
+  flex-shrink:0;width:var(--col-width);
+  background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);
+  display:flex;flex-direction:column;max-height:100%;
+}
+.col-header{
+  display:flex;align-items:center;gap:6px;padding:8px 10px;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.col-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.col-name{
+  flex:1;font-weight:600;font-size:13px;outline:none;
+  border:1px solid transparent;border-radius:var(--radius-sm);padding:1px 4px;
+  cursor:text;
+}
+.col-name:focus{border-color:var(--border-focus);background:var(--surface)}
+.col-count{
+  font-size:11px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:1px 7px;color:var(--text-2);white-space:nowrap;
+}
+.col-count.wip-over{background:#ffeef0;border-color:var(--priority-urgent);color:var(--priority-urgent)}
+.col-menu-btn{
+  padding:2px 6px;border-radius:var(--radius-sm);color:var(--text-2);font-size:16px;
+  transition:background var(--transition);
+}
+.col-menu-btn:hover{background:var(--bg);color:var(--text)}
+.task-list{
+  flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:40px;
+}
+.add-task-btn{
+  display:flex;align-items:center;gap:4px;padding:6px 10px;
+  color:var(--text-2);font-size:13px;border-top:1px solid var(--border);
+  transition:background var(--transition);flex-shrink:0;border-radius:0 0 var(--radius-lg) var(--radius-lg);
+}
+.add-task-btn:hover{background:var(--bg);color:var(--text)}
+
+/* Task card */
+.task-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:8px 10px 8px 13px;cursor:pointer;position:relative;
+  transition:box-shadow var(--transition),border-color var(--transition);
+  border-left:3px solid var(--priority-none);
+}
+.task-card:hover{box-shadow:var(--shadow-md)}
+.task-card.selected{border-color:var(--border-focus);box-shadow:0 0 0 2px rgba(99,102,241,.2)}
+.task-card[data-priority=low]{border-left-color:var(--priority-low)}
+.task-card[data-priority=medium]{border-left-color:var(--priority-medium)}
+.task-card[data-priority=high]{border-left-color:var(--priority-high)}
+.task-card[data-priority=urgent]{border-left-color:var(--priority-urgent)}
+.task-title{font-size:13px;font-weight:500;word-break:break-word}
+.task-desc{font-size:12px;color:var(--text-2);margin-top:3px;word-break:break-word}
+.task-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-top:6px}
+.due-badge{
+  font-size:11px;padding:1px 6px;border-radius:var(--radius-sm);
+  background:var(--bg);border:1px solid var(--border);
+}
+.due-badge.today{background:#ffebe9;border-color:var(--priority-urgent);color:var(--priority-urgent)}
+.due-badge.tomorrow{color:var(--priority-high)}
+.due-badge.this-week{color:var(--priority-medium)}
+.due-badge.overdue{color:var(--priority-urgent)}
+.task-badge{font-size:11px;color:var(--text-2)}
+.subtask-bar{
+  height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden;
+}
+.subtask-fill{height:100%;background:var(--border-focus);border-radius:2px;transition:width .2s}
+.drop-placeholder{
+  height:52px;border:2px dashed var(--border-focus);border-radius:var(--radius);
+  background:rgba(99,102,241,.05);flex-shrink:0;
+}
+
+/* Column floating menu */
+.float-menu{
+  position:fixed;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index:300;min-width:160px;
+  padding:4px 0;
+}
+.float-menu-item{
+  display:flex;align-items:center;gap:8px;padding:6px 14px;
+  font-size:13px;cursor:pointer;color:var(--text);
+  transition:background var(--transition);
+}
+.float-menu-item:hover{background:var(--bg)}
+.float-menu-item.danger{color:var(--priority-urgent)}
+.float-menu-sep{height:1px;background:var(--border);margin:4px 0}
+
+/* Calendar */
+#calendar-container{
+  height:100%;overflow-y:auto;padding:12px 16px;
+}
+.cal-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.cal-nav-btn{
+  padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border);
+  font-size:13px;background:var(--bg-2);transition:background var(--transition);
+}
+.cal-nav-btn:hover{background:var(--bg)}
+.cal-month-title{font-size:16px;font-weight:600}
+.cal-day-labels{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:6px;
+}
+.cal-day-label{font-size:12px;color:var(--text-2);text-align:center;padding:2px 0}
+.cal-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:16px}
+.cal-cell{
+  min-height:100px;background:var(--bg-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:6px;position:relative;outline:none;
+}
+.cal-cell:focus{border-color:var(--border-focus)}
+.cal-cell.today{border-color:var(--border-focus);background:rgba(99,102,241,.04)}
+.cal-cell.blank{background:transparent;border-color:transparent;pointer-events:none}
+.cal-date-num{font-size:11px;font-weight:600;color:var(--text-2);margin-bottom:4px}
+.cal-cell.today .cal-date-num{color:var(--border-focus)}
+.cal-mini-card{
+  font-size:11px;padding:2px 5px;border-radius:3px;
+  background:var(--surface);border:1px solid var(--border);
+  margin-bottom:3px;cursor:pointer;display:flex;align-items:center;gap:4px;
+  outline:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.cal-mini-card:hover{border-color:var(--border-focus)}
+.cal-mini-card:focus{border-color:var(--border-focus);box-shadow:0 0 0 2px rgba(99,102,241,.2)}
+.cal-priority-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.cal-more{font-size:11px;color:var(--border-focus);cursor:pointer;text-align:center;padding:1px 0}
+.cal-drop-over{border-color:var(--border-focus)!important;background:rgba(99,102,241,.1)!important}
+.cal-nodue{
+  background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:8px;margin-bottom:16px;
+}
+.cal-nodue-title{font-size:12px;color:var(--text-2);margin-bottom:6px}
+.cal-nodue-list{display:flex;flex-wrap:wrap;gap:4px;min-height:28px}
+
+/* Contribution graph */
+.contrib-wrap{margin-bottom:24px}
+.contrib-title{font-size:12px;color:var(--text-2);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.contrib-legend{display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-3)}
+.contrib-body{display:flex;gap:0}
+.contrib-labels{display:flex;flex-direction:column;gap:3px;padding-top:20px}
+.contrib-label{font-size:10px;color:var(--text-2);height:20px;width:24px;display:flex;align-items:center}
+.contrib-main{flex:1}
+.contrib-dates{display:flex;gap:4px;margin-bottom:3px}
+.contrib-date-label{flex:1;font-size:10px;color:var(--text-3);text-align:center}
+.contrib-weeks{display:flex;gap:8px}
+.contrib-week{display:flex;gap:4px}
+.contrib-col{display:flex;flex-direction:column;gap:3px}
+.contrib-cell{
+  width:20px;height:20px;border-radius:3px;border:1px solid var(--border);
+  background:var(--bg);
+}
+.contrib-cell.lv1{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.3)}
+.contrib-cell.lv2{background:rgba(99,102,241,.5);border-color:rgba(99,102,241,.6)}
+.contrib-cell.lv3{background:rgba(99,102,241,.8);border-color:rgba(99,102,241,.9)}
+
+/* Modal */
+.modal{
+  position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.4);
+}
+.modal.hidden{display:none}
+.modal-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);width:560px;max-width:96vw;max-height:90vh;
+  overflow-y:auto;padding:20px;
+}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:16px}
+.form-row{margin-bottom:12px}
+label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:4px}
+.form-input{
+  width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg-2);color:var(--text);outline:none;transition:border-color var(--transition);
+}
+.form-input:focus{border-color:var(--border-focus)}
+textarea.form-input{resize:vertical;min-height:70px}
+.due-row{display:flex;gap:8px;align-items:center}
+.due-input{width:80px}
+.due-cal-btn{
+  padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:13px;background:var(--bg-2);transition:background var(--transition);
+}
+.due-cal-btn:hover{background:var(--bg)}
+.priority-group{display:flex;gap:6px;flex-wrap:wrap}
+.priority-btn{
+  padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:12px;transition:all var(--transition);
+}
+.priority-btn[data-p=none].active{background:var(--priority-none);border-color:var(--priority-none);color:#fff}
+.priority-btn[data-p=low].active{background:var(--priority-low);border-color:var(--priority-low);color:#fff}
+.priority-btn[data-p=medium].active{background:var(--priority-medium);border-color:var(--priority-medium);color:#fff}
+.priority-btn[data-p=high].active{background:var(--priority-high);border-color:var(--priority-high);color:#fff}
+.priority-btn[data-p=urgent].active{background:var(--priority-urgent);border-color:var(--priority-urgent);color:#fff}
+.links-list{list-style:none;margin-bottom:6px}
+.links-list li{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px}
+.link-remove{color:var(--text-2);font-size:14px;padding:0 4px}
+.link-add-row{display:flex;gap:6px}
+.attach-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.attach-thumb{
+  width:72px;height:72px;object-fit:cover;border-radius:var(--radius-sm);
+  border:1px solid var(--border);cursor:pointer;
+}
+.attach-item{position:relative}
+.attach-remove{
+  position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;
+  border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;
+}
+.subtasks-list{margin-bottom:6px}
+.subtask-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.subtask-row input[type=checkbox]{width:14px;height:14px;cursor:pointer}
+.subtask-text{flex:1;font-size:13px}
+.subtask-remove{color:var(--text-2);font-size:14px;padding:0 4px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.btn-cancel{
+  padding:6px 14px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:13px;background:var(--bg-2);
+}
+.btn-submit{
+  padding:6px 16px;border:1px solid var(--border-focus);border-radius:var(--radius);
+  font-size:13px;background:var(--border-focus);color:#fff;
+}
+.btn-submit:hover{opacity:.9}
+
+/* Mini calendar picker */
+.mini-cal{
+  position:absolute;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow-lg);z-index:400;padding:8px;width:220px;
+}
+.mini-cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:13px;font-weight:600}
+.mini-cal-nav{padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px}
+.mini-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:11px;text-align:center}
+.mini-cal-day-label{color:var(--text-2);padding:2px 0}
+.mini-cal-day{padding:3px;border-radius:3px;cursor:pointer}
+.mini-cal-day:hover{background:var(--bg)}
+.mini-cal-day.today{color:var(--border-focus);font-weight:700}
+.mini-cal-day.selected{background:var(--border-focus);color:#fff}
+.mini-cal-day.empty{pointer-events:none}
+
+/* Quick capture */
+#quick-capture{
+  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);padding:12px 16px;width:480px;max-width:94vw;z-index:300;
+}
+#quick-capture.hidden{display:none}
+#qc-input{
+  width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:14px;background:var(--bg-2);color:var(--text);outline:none;
+}
+#qc-input:focus{border-color:var(--border-focus)}
+#qc-preview{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;min-height:20px}
+.qc-tag{
+  font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text-2);
+}
+.qc-hint{font-size:11px;color:var(--text-3);margin-top:4px}
+
+/* Command palette */
+#cmd-palette{
+  position:fixed;top:80px;left:50%;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);width:540px;max-width:94vw;z-index:300;overflow:hidden;
+}
+#cmd-palette.hidden{display:none}
+#cp-input{
+  width:100%;padding:12px 16px;border:none;border-bottom:1px solid var(--border);
+  font-size:14px;background:var(--surface);color:var(--text);outline:none;
+}
+#cp-results{max-height:320px;overflow-y:auto}
+.cp-item{
+  display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;
+  transition:background var(--transition);
+}
+.cp-item:hover,.cp-item.active{background:var(--bg)}
+.cp-priority-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cp-title{flex:1;font-size:13px}
+.cp-meta{font-size:11px;color:var(--text-2);white-space:nowrap}
+.cp-empty{padding:16px;text-align:center;color:var(--text-2);font-size:13px}
+
+/* Shortcuts modal */
+#shortcuts-modal{
+  position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.4);
+}
+#shortcuts-modal.hidden{display:none}
+.shortcuts-box{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg);padding:20px;max-width:500px;width:94vw;max-height:80vh;overflow-y:auto;
+}
+.shortcuts-box h2{font-size:15px;font-weight:600;margin-bottom:12px}
+.shortcuts-box h3{font-size:12px;font-weight:600;color:var(--text-2);margin:12px 0 6px;text-transform:uppercase}
+.shortcut-row{display:flex;align-items:center;margin-bottom:4px;font-size:13px}
+.shortcut-key{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:1px 6px;font-size:11px;font-family:monospace;min-width:28px;margin-right:6px;white-space:nowrap;
+}
+.shortcut-desc{color:var(--text-2)}
+.shortcuts-close{float:right;padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:12px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text-3)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <span id="board-title" contenteditable="true" spellcheck="false">My Board</span>
+    <div class="tb-sep"></div>
+    <button class="tb-btn active" id="btn-kanban">カンバン</button>
+    <button class="tb-btn" id="btn-calendar">カレンダー</button>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-add-col">+ カラム追加</button>
+    <div class="tb-spacer"></div>
+    <span id="stats" style="font-size:12px;color:var(--text-2)"></span>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-export">↑ エクスポート</button>
+    <button class="tb-btn" id="btn-import">↓ インポート</button>
+    <input type="file" id="import-file" accept=".json" style="display:none">
+    <button class="tb-btn" id="btn-help">?</button>
+  </div>
+  <div id="main">
+    <div id="columns-container"></div>
+    <div id="calendar-container" hidden></div>
+  </div>
+</div>
+
+<div id="task-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-heading">タスクを作成</div>
+    <div class="form-row">
+      <label for="modal-title">タイトル <span style="color:var(--priority-urgent)">*</span></label>
+      <input type="text" id="modal-title" class="form-input" tabindex="1" placeholder="タスクのタイトル">
+    </div>
+    <div class="form-row">
+      <label for="modal-desc">詳細</label>
+      <textarea id="modal-desc" class="form-input" tabindex="2" placeholder="詳細を入力..." rows="3"></textarea>
+    </div>
+    <div class="form-row">
+      <label>期限</label>
+      <div class="due-row" style="position:relative">
+        <input type="text" id="modal-due" class="form-input due-input" tabindex="3"
+          placeholder="0521" maxlength="4" inputmode="numeric">
+        <button class="due-cal-btn" id="modal-due-cal-btn" type="button" title="カレンダーで選択">📅</button>
+        <span id="modal-due-display" style="font-size:12px;color:var(--text-2)"></span>
+        <div id="modal-mini-cal" class="mini-cal" style="display:none;top:36px;left:0"></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>優先度</label>
+      <div class="priority-group" id="modal-priority-group" tabindex="4">
+        <button class="priority-btn" data-p="none" type="button">1 なし</button>
+        <button class="priority-btn" data-p="low" type="button">2 低</button>
+        <button class="priority-btn" data-p="medium" type="button">3 中</button>
+        <button class="priority-btn" data-p="high" type="button">4 高</button>
+        <button class="priority-btn" data-p="urgent" type="button">5 緊急</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>リンク</label>
+      <ul class="links-list" id="modal-links-list"></ul>
+      <div class="link-add-row">
+        <input type="url" id="modal-link-url" class="form-input" placeholder="https://..." style="flex:2">
+        <input type="text" id="modal-link-title" class="form-input" placeholder="タイトル(任意)" style="flex:1">
+        <button type="button" class="tb-btn" id="modal-link-add">追加</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>画像添付 (Ctrl+V で貼付可)</label>
+      <div class="attach-grid" id="modal-attach-grid"></div>
+      <input type="file" id="modal-attach-file" accept="image/*" style="display:none" multiple>
+      <button type="button" class="tb-btn" id="modal-attach-btn">ファイルを選択</button>
+    </div>
+    <div class="form-row">
+      <label>サブタスク</label>
+      <div class="subtasks-list" id="modal-subtasks-list"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="modal-subtask-input" class="form-input" placeholder="サブタスクを入力..." style="flex:1">
+        <button type="button" class="tb-btn" id="modal-subtask-add">追加</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" tabindex="5" id="modal-cancel">キャンセル</button>
+      <button class="btn-submit" tabindex="6" id="modal-submit">登録</button>
+    </div>
+  </div>
+</div>
+
+<div id="quick-capture" class="hidden">
+  <input type="text" id="qc-input" placeholder="タスク名 !4 @0521 — Enter で送信、Esc で閉じる">
+  <div id="qc-preview"></div>
+  <div class="qc-hint">!1-5: 優先度 &nbsp; @MMDD: 期限 &nbsp; Enter: 送信 &nbsp; Esc: 閉じる</div>
+</div>
+
+<div id="cmd-palette" class="hidden">
+  <input type="text" id="cp-input" placeholder="タスクを検索...">
+  <div id="cp-results"></div>
+</div>
+
+<div id="shortcuts-modal" class="hidden">
+  <div class="shortcuts-box">
+    <button class="shortcuts-close" id="shortcuts-close">✕</button>
+    <h2>キーボードショートカット</h2>
+    <h3>グローバル</h3>
+    <div class="shortcut-row"><span class="shortcut-key">Q</span><span class="shortcut-desc">Quick Capture を開く</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Ctrl+K</span><span class="shortcut-desc">Command Palette を開く</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">/</span><span class="shortcut-desc">Command Palette を開く</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">N</span><span class="shortcut-desc">新規タスク作成</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">C</span><span class="shortcut-desc">新規カラム作成</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">V</span><span class="shortcut-desc">カンバン ↔ カレンダー切替</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Ctrl+Z</span><span class="shortcut-desc">アンドゥ</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">?</span><span class="shortcut-desc">このヘルプを表示</span></div>
+    <h3>カンバンビュー</h3>
+    <div class="shortcut-row"><span class="shortcut-key">↑↓</span><span class="shortcut-desc">タスク選択移動</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">←→</span><span class="shortcut-desc">カラムフォーカス移動</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Shift+←→</span><span class="shortcut-desc">選択タスクを隣カラムへ移動</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Shift+↑↓</span><span class="shortcut-desc">選択タスクをカラム内で移動</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Enter / E</span><span class="shortcut-desc">選択タスクを編集</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">D</span><span class="shortcut-desc">選択タスクを削除</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">選択解除</span></div>
+    <h3>カレンダービュー</h3>
+    <div class="shortcut-row"><span class="shortcut-key">H</span><span class="shortcut-desc">前月へ</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">L</span><span class="shortcut-desc">翌月へ</span></div>
+    <h3>モーダル内</h3>
+    <div class="shortcut-row"><span class="shortcut-key">Ctrl+Enter</span><span class="shortcut-desc">タスクを保存</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Esc</span><span class="shortcut-desc">モーダルを閉じる</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">1〜5</span><span class="shortcut-desc">優先度を設定</span></div>
+    <div class="shortcut-row"><span class="shortcut-key">Ctrl+V</span><span class="shortcut-desc">クリップボードから画像貼付</span></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ─── TaskDB ───────────────────────────────────────────────────────────────────
+class TaskDB {
+  constructor() { this.db = null; }
+  async init() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('TaskStationDB', 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('boards')) db.createObjectStore('boards', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('columns')) {
+          const cs = db.createObjectStore('columns', { keyPath: 'id' });
+          cs.createIndex('boardId', 'boardId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('tasks')) {
+          const ts = db.createObjectStore('tasks', { keyPath: 'id' });
+          ts.createIndex('columnId', 'columnId', { unique: false });
+        }
+      };
+      req.onsuccess = e => { this.db = e.target.result; resolve(); };
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+  async getAll(store) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(store, 'readonly');
+      const req = tx.objectStore(store).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+  async put(store, record) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(store, 'readwrite');
+      const req = tx.objectStore(store).put(record);
+      req.onsuccess = () => resolve();
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+  async delete(store, id) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(store, 'readwrite');
+      const req = tx.objectStore(store).delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+  async putMany(store, records) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(store, 'readwrite');
+      const os = tx.objectStore(store);
+      let i = 0;
+      const next = () => {
+        if (i >= records.length) { resolve(); return; }
+        const req = os.put(records[i++]);
+        req.onsuccess = next;
+        req.onerror = e => reject(e.target.error);
+      };
+      next();
+    });
+  }
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
+class Store {
+  constructor(db) {
+    this._db = db;
+    this._listeners = {};
+    this._history = [];
+    this.state = {
+      boards: [], columns: [], tasks: [],
+      currentBoardId: null,
+      selectedTaskId: null,
+      focusedColumnId: null,
+      view: localStorage.getItem('lastView') || 'kanban',
+      calYear: parseInt(localStorage.getItem('calYear')) || new Date().getFullYear(),
+      calMonth: parseInt(localStorage.getItem('calMonth')) || new Date().getMonth() + 1,
+    };
+  }
+  on(event, cb) {
+    if (!this._listeners[event]) this._listeners[event] = [];
+    this._listeners[event].push(cb);
+    return () => { this._listeners[event] = this._listeners[event].filter(x => x !== cb); };
+  }
+  emit(event, data) {
+    (this._listeners[event] || []).forEach(cb => cb(data));
+  }
+  get board() {
+    return this.state.boards.find(b => b.id === this.state.currentBoardId) || null;
+  }
+  get columns() {
+    const b = this.board;
+    if (!b) return [];
+    return b.columnOrder.map(id => this.state.columns.find(c => c.id === id)).filter(Boolean);
+  }
+  getColumnTasks(colId) {
+    const col = this.state.columns.find(c => c.id === colId);
+    if (!col) return [];
+    const taskMap = {};
+    this.state.tasks.filter(t => t.columnId === colId).forEach(t => { taskMap[t.id] = t; });
+    const ordered = col.taskOrder.map(id => taskMap[id]).filter(Boolean);
+    const extra = this.state.tasks.filter(t => t.columnId === colId && !col.taskOrder.includes(t.id));
+    return [...ordered, ...extra];
+  }
+  getAllTasks() {
+    const colIds = new Set(this.columns.map(c => c.id));
+    return this.state.tasks.filter(t => colIds.has(t.columnId));
+  }
+
+  async loadAll() {
+    const [boards, columns, tasks] = await Promise.all([
+      this._db.getAll('boards'), this._db.getAll('columns'), this._db.getAll('tasks')
+    ]);
+    this.state.boards = boards;
+    this.state.columns = columns;
+    this.state.tasks = tasks;
+
+    if (boards.length === 0) {
+      await this._createDefaultBoard();
+    } else {
+      this.state.currentBoardId = boards[0].id;
+    }
+    this.emit('loaded');
+  }
+
+  async _createDefaultBoard() {
+    const boardId = crypto.randomUUID();
+    const now = Date.now();
+    const board = {
+      id: boardId, name: 'My Board',
+      columnOrder: [], createdAt: now, updatedAt: now
+    };
+    const cols = [
+      { id: crypto.randomUUID(), boardId, name: 'ToDo',   color: '#6366f1', wipLimit: null, taskOrder: [] },
+      { id: crypto.randomUUID(), boardId, name: 'Doing',  color: '#f59e0b', wipLimit: null, taskOrder: [] },
+      { id: crypto.randomUUID(), boardId, name: 'Review', color: '#8b5cf6', wipLimit: null, taskOrder: [] },
+      { id: crypto.randomUUID(), boardId, name: 'Done',   color: '#10b981', wipLimit: null, taskOrder: [] },
+    ];
+    board.columnOrder = cols.map(c => c.id);
+
+    const nf = this._nextFriday();
+    const sampleTasks = [
+      { id: crypto.randomUUID(), columnId: cols[0].id, title: 'ようこそ Task Station へ！', description: 'タスクをドラッグして移動できます。ダブルクリックで編集モーダルが開きます。', priority: 'none', tags: [], links: [], attachments: [], subtasks: [], dueDate: nf, completedAt: null, createdAt: now, updatedAt: now },
+      { id: crypto.randomUUID(), columnId: cols[0].id, title: 'キーボードショートカットを確認', description: '? キーでショートカット一覧が開きます', priority: 'low', tags: [], links: [], attachments: [], subtasks: [], dueDate: null, completedAt: null, createdAt: now, updatedAt: now },
+      { id: crypto.randomUUID(), columnId: cols[1].id, title: 'Q キーで素早くタスク追加', description: 'Quick Capture バーが開きます', priority: 'medium', tags: [], links: [], attachments: [], subtasks: [{ id: crypto.randomUUID(), text: '!4 で高優先度', done: false }, { id: crypto.randomUUID(), text: '@MMDD で期限設定', done: true }], dueDate: null, completedAt: null, createdAt: now, updatedAt: now },
+      { id: crypto.randomUUID(), columnId: cols[3].id, title: 'サンプル完了タスク', description: '今日完了したタスクです', priority: 'none', tags: [], links: [], attachments: [], subtasks: [], dueDate: null, completedAt: now, createdAt: now, updatedAt: now },
+    ];
+    sampleTasks.forEach(t => {
+      const col = cols.find(c => c.id === t.columnId);
+      if (col) col.taskOrder.push(t.id);
+    });
+
+    this.state.boards = [board];
+    this.state.columns = cols;
+    this.state.tasks = sampleTasks;
+    this.state.currentBoardId = boardId;
+
+    await this._db.put('boards', board);
+    await this._db.putMany('columns', cols);
+    await this._db.putMany('tasks', sampleTasks);
+  }
+
+  _nextFriday() {
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    const dow = d.getDay(); // 0=Sun,5=Fri
+    let diff = 5 - dow;
+    if (diff <= 0) diff += 7;
+    d.setDate(d.getDate() + diff);
+    return d.getTime();
+  }
+
+  async createTask(columnId, data) {
+    const now = Date.now();
+    const task = {
+      id: crypto.randomUUID(), columnId,
+      title: data.title || 'Untitled',
+      description: data.description || '',
+      priority: data.priority || 'none',
+      tags: data.tags || [],
+      links: data.links || [],
+      attachments: data.attachments || [],
+      subtasks: data.subtasks || [],
+      dueDate: data.dueDate || null,
+      completedAt: null,
+      createdAt: now, updatedAt: now,
+    };
+    this.state.tasks.push(task);
+    const col = this.state.columns.find(c => c.id === columnId);
+    if (col) { col.taskOrder.push(task.id); await this._db.put('columns', col); }
+    await this._db.put('tasks', task);
+    this._pushHistory({ undo: async () => { await this.deleteTask(task.id); } });
+    this.emit('changed');
+    return task;
+  }
+
+  async updateTask(taskId, updates) {
+    const task = this.state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const prev = { ...task, links: [...(task.links||[])], attachments: [...(task.attachments||[])], subtasks: [...(task.subtasks||[])] };
+    Object.assign(task, updates, { updatedAt: Date.now() });
+    await this._db.put('tasks', task);
+    this._pushHistory({ undo: async () => { await this.updateTask(taskId, prev); } });
+    this.emit('changed');
+  }
+
+  async deleteTask(taskId) {
+    const task = this.state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const col = this.state.columns.find(c => c.id === task.columnId);
+    const snapshot = { ...task, links: [...(task.links||[])], attachments: [...(task.attachments||[])], subtasks: JSON.parse(JSON.stringify(task.subtasks||[])) };
+    const orderSnap = col ? [...col.taskOrder] : [];
+    this.state.tasks = this.state.tasks.filter(t => t.id !== taskId);
+    if (col) { col.taskOrder = col.taskOrder.filter(id => id !== taskId); await this._db.put('columns', col); }
+    await this._db.delete('tasks', taskId);
+    if (this.state.selectedTaskId === taskId) this.state.selectedTaskId = null;
+    this._pushHistory({ undo: async () => {
+      this.state.tasks.push(snapshot);
+      const c = this.state.columns.find(x => x.id === snapshot.columnId);
+      if (c) { c.taskOrder = orderSnap; await this._db.put('columns', c); }
+      await this._db.put('tasks', snapshot);
+      this.emit('changed');
+    }});
+    this.emit('changed');
+  }
+
+  async moveTask(taskId, toColumnId, toIndex) {
+    const task = this.state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const fromCol = this.state.columns.find(c => c.id === task.columnId);
+    const toCol = this.state.columns.find(c => c.id === toColumnId);
+    if (!toCol) return;
+    const prevColId = task.columnId;
+    const prevOrder = fromCol ? [...fromCol.taskOrder] : [];
+    const prevToOrder = [...toCol.taskOrder];
+    const prevCompletedAt = task.completedAt;
+
+    if (fromCol) { fromCol.taskOrder = fromCol.taskOrder.filter(id => id !== taskId); }
+    task.columnId = toColumnId;
+
+    const cols = this.columns;
+    const isLastCol = cols.length > 0 && cols[cols.length - 1].id === toColumnId;
+    const wasLastCol = cols.length > 0 && cols[cols.length - 1].id === prevColId;
+    if (isLastCol && !task.completedAt) task.completedAt = Date.now();
+    else if (!isLastCol && wasLastCol) task.completedAt = null;
+
+    const arr = toCol.taskOrder.filter(id => id !== taskId);
+    const idx = Math.max(0, Math.min(toIndex === undefined ? arr.length : toIndex, arr.length));
+    arr.splice(idx, 0, taskId);
+    toCol.taskOrder = arr;
+
+    task.updatedAt = Date.now();
+    if (fromCol) await this._db.put('columns', fromCol);
+    await this._db.put('columns', toCol);
+    await this._db.put('tasks', task);
+
+    this._pushHistory({ undo: async () => {
+      task.columnId = prevColId;
+      task.completedAt = prevCompletedAt;
+      if (fromCol) { fromCol.taskOrder = prevOrder; await this._db.put('columns', fromCol); }
+      toCol.taskOrder = prevToOrder;
+      await this._db.put('columns', toCol);
+      await this._db.put('tasks', task);
+      this.emit('changed');
+    }});
+    this.emit('changed');
+    if (isLastCol) this.emit('taskCompleted', task);
+  }
+
+  async createColumn(name) {
+    const b = this.board;
+    if (!b) return;
+    const col = {
+      id: crypto.randomUUID(), boardId: b.id,
+      name: name || '新しいカラム',
+      color: '#6366f1', wipLimit: null, taskOrder: []
+    };
+    this.state.columns.push(col);
+    b.columnOrder.push(col.id);
+    b.updatedAt = Date.now();
+    await this._db.put('columns', col);
+    await this._db.put('boards', b);
+    const colId = col.id;
+    this._pushHistory({ undo: async () => { await this.deleteColumn(colId); } });
+    this.emit('changed');
+    return col;
+  }
+
+  async updateColumn(colId, updates) {
+    const col = this.state.columns.find(c => c.id === colId);
+    if (!col) return;
+    const prev = { ...col, taskOrder: [...col.taskOrder] };
+    Object.assign(col, updates);
+    await this._db.put('columns', col);
+    this._pushHistory({ undo: async () => { await this.updateColumn(colId, prev); } });
+    this.emit('changed');
+  }
+
+  async deleteColumn(colId) {
+    const col = this.state.columns.find(c => c.id === colId);
+    if (!col) return;
+    const b = this.board;
+    if (!b) return;
+    const tasksInCol = this.state.tasks.filter(t => t.columnId === colId);
+    for (const t of tasksInCol) { await this._db.delete('tasks', t.id); }
+    this.state.tasks = this.state.tasks.filter(t => t.columnId !== colId);
+    this.state.columns = this.state.columns.filter(c => c.id !== colId);
+    b.columnOrder = b.columnOrder.filter(id => id !== colId);
+    b.updatedAt = Date.now();
+    await this._db.delete('columns', colId);
+    await this._db.put('boards', b);
+    if (this.state.focusedColumnId === colId) this.state.focusedColumnId = null;
+    this.emit('changed');
+  }
+
+  async updateBoard(name) {
+    const b = this.board;
+    if (!b) return;
+    b.name = name;
+    b.updatedAt = Date.now();
+    await this._db.put('boards', b);
+    this.emit('changed');
+  }
+
+  async importData(data) {
+    // Clear existing data
+    for (const t of this.state.tasks) await this._db.delete('tasks', t.id);
+    for (const c of this.state.columns) await this._db.delete('columns', c.id);
+    for (const b of this.state.boards) await this._db.delete('boards', b.id);
+    // Import new data
+    await this._db.putMany('boards', data.boards);
+    await this._db.putMany('columns', data.columns);
+    await this._db.putMany('tasks', data.tasks);
+    this.state.boards = data.boards;
+    this.state.columns = data.columns;
+    this.state.tasks = data.tasks;
+    this.state.currentBoardId = data.boards[0] ? data.boards[0].id : null;
+    this._history = [];
+    this.emit('changed');
+  }
+
+  setView(view) {
+    this.state.view = view;
+    localStorage.setItem('lastView', view);
+    this.emit('viewChanged', view);
+  }
+  setCalendarNav(year, month) {
+    this.state.calYear = year;
+    this.state.calMonth = month;
+    localStorage.setItem('calYear', String(year));
+    localStorage.setItem('calMonth', String(month));
+    this.emit('calNavChanged');
+  }
+  selectTask(id) {
+    this.state.selectedTaskId = id;
+    this.emit('selectionChanged', id);
+  }
+  focusColumn(id) {
+    this.state.focusedColumnId = id;
+    this.emit('focusChanged', id);
+  }
+  async undo() {
+    if (this._history.length === 0) return;
+    const action = this._history.pop();
+    await action.undo();
+  }
+  _pushHistory(action) {
+    this._history.push(action);
+    if (this._history.length > 20) this._history.shift();
+  }
+}
+
+// ─── BoardView ────────────────────────────────────────────────────────────────
+class BoardView {
+  constructor(store) {
+    this._store = store;
+    this._container = document.getElementById('columns-container');
+  }
+  _esc(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  render() {
+    const store = this._store;
+    const cols = store.columns;
+    const container = this._container;
+    // Save scroll positions
+    const scrolls = {};
+    container.querySelectorAll('.task-list').forEach(el => { scrolls[el.dataset.colId] = el.scrollTop; });
+
+    container.innerHTML = '';
+    const todayMid = new Date(); todayMid.setHours(0,0,0,0); const todayMs = todayMid.getTime();
+    cols.forEach(col => {
+      const el = this._renderColumn(col, cols, todayMs);
+      container.appendChild(el);
+    });
+    // Restore scroll
+    container.querySelectorAll('.task-list').forEach(el => {
+      if (scrolls[el.dataset.colId] !== undefined) el.scrollTop = scrolls[el.dataset.colId];
+    });
+  }
+  _renderColumn(col, allCols, todayMs) {
+    const store = this._store;
+    const isLastCol = allCols.length > 0 && allCols[allCols.length-1].id === col.id;
+    let tasks = store.getColumnTasks(col.id);
+    if (isLastCol) {
+      tasks = tasks.filter(t => t.completedAt == null || t.completedAt >= todayMs);
+    }
+    const wip = col.wipLimit;
+    const over = wip && tasks.length > wip;
+    const isFocused = store.state.focusedColumnId === col.id;
+
+    const colEl = document.createElement('div');
+    colEl.className = 'column';
+    colEl.dataset.colId = col.id;
+    if (isFocused) colEl.style.outline = '2px solid var(--border-focus)';
+
+    // Header
+    const validColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
+    const header = document.createElement('div');
+    header.className = 'col-header';
+    header.innerHTML = `
+      <span class="col-dot" style="background:${validColor}"></span>
+      <span class="col-name" contenteditable="true" spellcheck="false" data-col-id="${col.id}">${this._esc(col.name)}</span>
+      <span class="col-count${over?' wip-over':''}">${tasks.length}${wip?' / '+wip:''}</span>
+      <button class="col-menu-btn" data-col-id="${col.id}" title="カラムメニュー">···</button>
+    `;
+    // Column name editing
+    const nameEl = header.querySelector('.col-name');
+    nameEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); }
+    });
+    nameEl.addEventListener('blur', () => {
+      const newName = nameEl.textContent.trim() || col.name;
+      if (newName !== col.name) store.updateColumn(col.id, { name: newName });
+    });
+    // Menu button
+    header.querySelector('.col-menu-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      this._showColMenu(e, col);
+    });
+    colEl.appendChild(header);
+
+    // Task list
+    const taskList = document.createElement('div');
+    taskList.className = 'task-list';
+    taskList.dataset.colId = col.id;
+    tasks.forEach(task => {
+      taskList.appendChild(this._renderTask(task));
+    });
+    colEl.appendChild(taskList);
+
+    // Click on column background to focus
+    colEl.addEventListener('click', e => {
+      if (e.target === colEl || e.target === taskList) {
+        store.focusColumn(col.id);
+      }
+    });
+
+    // Add task button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-task-btn';
+    addBtn.innerHTML = '+ タスクを追加';
+    addBtn.addEventListener('click', () => {
+      store.focusColumn(col.id);
+      window.modal.openCreate(col.id);
+    });
+    colEl.appendChild(addBtn);
+
+    return colEl;
+  }
+  _renderTask(task) {
+    const store = this._store;
+    const isSelected = store.state.selectedTaskId === task.id;
+    const card = document.createElement('div');
+    card.className = 'task-card' + (isSelected ? ' selected' : '');
+    card.dataset.taskId = task.id;
+    card.dataset.priority = task.priority || 'none';
+    card.draggable = true;
+    card.tabIndex = 0;
+
+    let html = `<div class="task-title">${this._esc(task.title)}</div>`;
+    if (task.description) {
+      const preview = task.description.length > 72 ? task.description.slice(0, 72) + '…' : task.description;
+      html += `<div class="task-desc">${this._esc(preview)}</div>`;
+    }
+    if (task.subtasks && task.subtasks.length > 0) {
+      const done = task.subtasks.filter(s => s.done).length;
+      const pct = Math.round(done / task.subtasks.length * 100);
+      html += `<div class="subtask-bar"><div class="subtask-fill" style="width:${pct}%"></div></div>`;
+    }
+    const hasMeta = task.dueDate || (task.links && task.links.length) || (task.attachments && task.attachments.length);
+    if (hasMeta) {
+      html += '<div class="task-meta">';
+      if (task.dueDate) {
+        const { text, cls } = this._formatDue(task.dueDate);
+        html += `<span class="due-badge ${cls}">${text}</span>`;
+      }
+      if (task.links && task.links.length) html += `<span class="task-badge">↗${task.links.length}</span>`;
+      if (task.attachments && task.attachments.length) html += `<span class="task-badge">◫${task.attachments.length}</span>`;
+      html += '</div>';
+    }
+    card.innerHTML = html;
+
+    card.addEventListener('click', e => {
+      e.stopPropagation();
+      store.selectTask(task.id);
+      store.focusColumn(task.columnId);
+    });
+    card.addEventListener('dblclick', () => { window.modal.openEdit(task.id); });
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { window.modal.openEdit(task.id); }
+    });
+    return card;
+  }
+  _formatDue(ts) {
+    const now = new Date();
+    const today = new Date(now); today.setHours(0,0,0,0);
+    const todayMs = today.getTime();
+    const tomorrowMs = todayMs + 86400000;
+    const due = new Date(ts);
+    const dueDay = new Date(ts); dueDay.setHours(0,0,0,0);
+    const dueDayMs = dueDay.getTime();
+
+    // Next Friday
+    const fri = new Date(today);
+    const dow = fri.getDay();
+    let diff = 5 - dow; if (diff <= 0) diff += 7;
+    fri.setDate(fri.getDate() + diff);
+    const friMs = fri.getTime();
+    const nextNextFri = new Date(fri); nextNextFri.setDate(fri.getDate() + 7);
+    const nextNextFriMs = nextNextFri.getTime();
+
+    if (dueDayMs < todayMs) {
+      return { text: `${due.getMonth()+1}/${due.getDate()} ⚠`, cls: 'overdue' };
+    }
+    if (dueDayMs === todayMs) return { text: '今日', cls: 'today' };
+    if (dueDayMs === tomorrowMs) return { text: '明日', cls: 'tomorrow' };
+    if (dueDayMs === friMs) return { text: '今週金', cls: 'this-week' };
+    if (dueDayMs === nextNextFriMs) return { text: '来週金', cls: '' };
+    return { text: `${due.getMonth()+1}/${due.getDate()}`, cls: '' };
+  }
+  _showColMenu(e, col) {
+    document.querySelectorAll('.float-menu').forEach(m => m.remove());
+    const menu = document.createElement('div');
+    menu.className = 'float-menu';
+    const validColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
+    menu.innerHTML = `
+      <div class="float-menu-item" id="fmi-color">
+        <span>カラー変更</span>
+        <input type="color" value="${validColor}" style="width:24px;height:20px;border:none;padding:0;cursor:pointer;background:none">
+      </div>
+      <div class="float-menu-item" id="fmi-wip">WIP 上限設定</div>
+      <div class="float-menu-sep"></div>
+      <div class="float-menu-item danger" id="fmi-del">カラムを削除</div>
+    `;
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    document.body.appendChild(menu);
+
+    // Adjust if off-screen
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = (e.clientX - rect.width) + 'px';
+    if (rect.bottom > window.innerHeight) menu.style.top = (e.clientY - rect.height) + 'px';
+
+    menu.querySelector('#fmi-color input').addEventListener('change', async ev => {
+      const color = ev.target.value;
+      if (/^#[0-9a-fA-F]{3,8}$/.test(color)) {
+        await this._store.updateColumn(col.id, { color });
+      }
+      menu.remove();
+    });
+    menu.querySelector('#fmi-wip').addEventListener('click', () => {
+      const cur = col.wipLimit ? String(col.wipLimit) : '';
+      const val = prompt('WIP 上限を入力 (空欄で制限なし):', cur);
+      if (val === null) { menu.remove(); return; }
+      const n = parseInt(val);
+      this._store.updateColumn(col.id, { wipLimit: isNaN(n) || n <= 0 ? null : n });
+      menu.remove();
+    });
+    menu.querySelector('#fmi-del').addEventListener('click', () => {
+      if (confirm(`カラム「${col.name}」を削除しますか？\n配下のタスクもすべて削除されます。`)) {
+        this._store.deleteColumn(col.id);
+      }
+      menu.remove();
+    });
+    const close = e2 => { if (!menu.contains(e2.target)) { menu.remove(); document.removeEventListener('mousedown', close); } };
+    setTimeout(() => document.addEventListener('mousedown', close), 0);
+  }
+}
+
+// ─── CalendarView ────────────────────────────────────────────────────────────
+class CalendarView {
+  constructor(store) {
+    this._store = store;
+    this._container = document.getElementById('calendar-container');
+    this._cellOffsets = {};  // { "YYYY-M-D": number } scroll offset per cell
+    this._ctxCleanup = null; // cleanup fn for active context menu
+  }
+
+  render() {
+    const { calYear: year, calMonth: month } = this._store.state;
+    this._container.innerHTML = '';
+    this._container.appendChild(this._renderHeader(year, month));
+    this._container.appendChild(this._renderDayLabels());
+    this._container.appendChild(this._renderGrid(year, month));
+    this._container.appendChild(this._renderNodue());
+    this._container.appendChild(this._renderContribution());
+  }
+
+  _renderHeader(year, month) {
+    const h = document.createElement('div');
+    h.className = 'cal-header';
+    const prev = document.createElement('button');
+    prev.className = 'tb-btn'; prev.textContent = '◀';
+    prev.addEventListener('click', () => this._navigate(-1));
+    const next = document.createElement('button');
+    next.className = 'tb-btn'; next.textContent = '▶';
+    next.addEventListener('click', () => this._navigate(1));
+    const title = document.createElement('span');
+    title.style.cssText = 'font-weight:600;font-size:15px;';
+    title.textContent = `${year}年 ${month}月`;
+    h.append(prev, title, next);
+    return h;
+  }
+
+  _renderDayLabels() {
+    const row = document.createElement('div');
+    row.className = 'cal-day-labels';
+    ['月', '火', '水', '木', '金'].forEach(d => {
+      const el = document.createElement('div');
+      el.style.cssText = 'text-align:center;font-size:12px;color:var(--text-2);font-weight:500;';
+      el.textContent = d;
+      row.appendChild(el);
+    });
+    return row;
+  }
+
+  _renderGrid(year, month) {
+    const grid = document.createElement('div');
+    grid.className = 'cal-grid';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+
+    // Collect visible tasks (exclude last 2 columns = Review + Done)
+    const cols = this._store.columns;
+    const visibleColIds = new Set(cols.slice(0, Math.max(0, cols.length - 2)).map(c => c.id));
+    const tasks = this._store.getAllTasks().filter(t => visibleColIds.has(t.columnId) && t.dueDate);
+
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+
+    // Build array of weekdays (Mon-Fri only) in the month
+    // Fill leading empty cells based on day-of-week of firstDay
+    const dow0 = firstDay.getDay(); // 0=Sun, 1=Mon...6=Sat
+    // Monday-based offset
+    const leadingBlanks = dow0 === 0 ? 4 : dow0 - 1; // Sun→4 blanks, Mon→0, Fri→4
+
+    // Add leading blanks
+    for (let i = 0; i < leadingBlanks; i++) {
+      const blank = document.createElement('div');
+      grid.appendChild(blank);
+    }
+
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      const date = new Date(year, month - 1, d);
+      const dow = date.getDay();
+      if (dow === 0 || dow === 6) continue; // skip weekends
+
+      const isToday = date.getTime() === todayMs;
+      const dayTasks = tasks.filter(t => {
+        const td = new Date(t.dueDate);
+        return td.getFullYear() === year && td.getMonth() + 1 === month && td.getDate() === d;
+      });
+
+      grid.appendChild(this._renderDayCell(d, date, dayTasks, isToday, dow));
+    }
+
+    return grid;
+  }
+
+  _renderDayCell(day, date, tasks, isToday, dow) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell' + (isToday ? ' today' : '');
+    cell.dataset.date = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+
+    // D&D drop target: drop on cell sets due date
+    cell.addEventListener('dragover', e => { e.preventDefault(); cell.style.background = 'var(--border-focus)'; cell.style.opacity = '0.3'; });
+    cell.addEventListener('dragleave', () => { cell.style.background = ''; cell.style.opacity = ''; });
+    cell.addEventListener('drop', async e => {
+      e.preventDefault();
+      cell.style.background = ''; cell.style.opacity = '';
+      const taskId = e.dataTransfer.getData('text/plain');
+      if (!taskId) return;
+      const noon = new Date(date); noon.setHours(12, 0, 0, 0);
+      await this._store.updateTask(taskId, { dueDate: noon.getTime() });
+    });
+
+    const dateLabel = document.createElement('div');
+    dateLabel.style.cssText = 'font-size:11px;color:var(--text-2);margin-bottom:4px;font-weight:' + (isToday ? '700' : '400') + ';color:' + (isToday ? 'var(--border-focus)' : 'var(--text-2)');
+    dateLabel.textContent = day;
+    cell.appendChild(dateLabel);
+
+    const key = cell.dataset.date;
+    const offset = this._cellOffsets[key] || 0;
+    const maxVisible = 3;
+    const clampedOffset = Math.max(0, Math.min(offset, Math.max(0, tasks.length - maxVisible)));
+    this._cellOffsets[key] = clampedOffset;
+
+    const visibleTasks = tasks.slice(clampedOffset, clampedOffset + maxVisible);
+
+    // Up indicator
+    if (clampedOffset > 0) {
+      const up = document.createElement('div');
+      up.className = 'cal-more';
+      up.textContent = `↑${clampedOffset}件`;
+      up.addEventListener('click', () => {
+        this._cellOffsets[key] = Math.max(0, clampedOffset - 1);
+        this.render();
+      });
+      cell.appendChild(up);
+    }
+
+    visibleTasks.forEach(task => cell.appendChild(this._renderMiniCard(task)));
+
+    // Down indicator
+    const remaining = tasks.length - clampedOffset - maxVisible;
+    if (remaining > 0) {
+      const down = document.createElement('div');
+      down.className = 'cal-more';
+      down.textContent = `↓${remaining}件`;
+      down.addEventListener('click', () => {
+        this._cellOffsets[key] = clampedOffset + 1;
+        this.render();
+      });
+      cell.appendChild(down);
+    }
+
+    // Ctrl/Alt+↑↓ on cell scrolls hidden tasks
+    cell.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.altKey) && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        if (e.key === 'ArrowDown') this._cellOffsets[key] = Math.min(clampedOffset + 1, Math.max(0, tasks.length - maxVisible));
+        else this._cellOffsets[key] = Math.max(0, clampedOffset - 1);
+        this.render();
+      }
+    });
+
+    // N key on cell: create task for that date
+    cell.setAttribute('tabindex', '-1');
+    cell.addEventListener('keydown', e => {
+      if (e.key === 'n' || e.key === 'N') {
+        if (e.ctrlKey || e.altKey || e.metaKey) return;
+        e.preventDefault();
+        const noon = new Date(date); noon.setHours(12, 0, 0, 0);
+        window._modal && window._modal.open(null, null, noon.getTime());
+      }
+    });
+
+    return cell;
+  }
+
+  _renderMiniCard(task) {
+    const card = document.createElement('div');
+    card.className = 'cal-mini-card';
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('draggable', 'true');
+    card.dataset.taskId = task.id;
+    card.style.borderLeft = `3px solid var(--priority-${task.priority || 'none'})`;
+
+    card.textContent = task.title;
+
+    // Drag source
+    card.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', task.id);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    // Click to edit
+    card.addEventListener('click', e => {
+      e.stopPropagation();
+      window._modal && window._modal.open(task);
+    });
+
+    // Enter/Space to edit
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        window._modal && window._modal.open(task);
+        return;
+      }
+      // Arrow keys for date movement
+      if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+        if (e.ctrlKey || e.altKey) {
+          // Ctrl/Alt+↑↓: scroll cell — bubble to parent cell
+          return;
+        }
+        e.preventDefault();
+        this._moveMiniCardDate(task, e.key);
+      }
+    });
+
+    // Right-click context menu
+    card.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      this._showContextMenu(task, e.clientX, e.clientY);
+    });
+
+    return card;
+  }
+
+  async _moveMiniCardDate(task, key) {
+    if (!task.dueDate) return;
+    const d = new Date(task.dueDate);
+    if (key === 'ArrowRight') { d.setDate(d.getDate() + 1); this._skipToWorkday(d, true); }
+    else if (key === 'ArrowLeft') { d.setDate(d.getDate() - 1); this._skipToWorkday(d, false); }
+    else if (key === 'ArrowDown') { d.setDate(d.getDate() + 7); }
+    else if (key === 'ArrowUp') { d.setDate(d.getDate() - 7); }
+    await this._store.updateTask(task.id, { dueDate: d.getTime() });
+  }
+
+  // Skip over weekends: if date lands on Sat/Sun, move to Mon (forward) or Fri (backward)
+  _skipToWorkday(date, forward) {
+    const dow = date.getDay();
+    if (dow === 6) date.setDate(date.getDate() + (forward ? 2 : -1));
+    else if (dow === 0) date.setDate(date.getDate() + (forward ? 1 : -2));
+  }
+
+  _showContextMenu(task, x, y) {
+    // Clean up any existing context menu
+    if (this._ctxCleanup) { this._ctxCleanup(); this._ctxCleanup = null; }
+
+    const menu = document.createElement('div');
+    menu.className = 'float-menu';
+    menu.style.cssText = `position:fixed;left:${x}px;top:${y}px;visibility:hidden;`;
+
+    const items = [
+      { label: '前日へ (←)', action: () => this._moveMiniCardDate(task, 'ArrowLeft') },
+      { label: '翌日へ (→)', action: () => this._moveMiniCardDate(task, 'ArrowRight') },
+      { label: '+1週間 (↓)', action: () => this._moveMiniCardDate(task, 'ArrowDown') },
+      { label: '−1週間 (↑)', action: () => this._moveMiniCardDate(task, 'ArrowUp') },
+      { label: '期限をクリア', action: () => this._store.updateTask(task.id, { dueDate: null }) },
+      { label: '編集...', action: () => window._modal && window._modal.open(task) },
+    ];
+
+    items.forEach(item => {
+      const btn = document.createElement('button');
+      btn.className = 'float-menu-item';
+      btn.textContent = item.label;
+      btn.addEventListener('click', () => { item.action(); cleanup(); });
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+
+    // Reposition if off-screen
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) menu.style.left = (x - rect.width) + 'px';
+    if (rect.bottom > window.innerHeight) menu.style.top = (y - rect.height) + 'px';
+    menu.style.visibility = 'visible';
+
+    const dismiss = e => { if (!menu.contains(e.target)) cleanup(); };
+    const cleanup = () => {
+      menu.remove();
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', escDismiss);
+      this._ctxCleanup = null;
+    };
+    const escDismiss = e => { if (e.key === 'Escape') cleanup(); };
+
+    setTimeout(() => {
+      document.addEventListener('mousedown', dismiss);
+      document.addEventListener('keydown', escDismiss);
+    }, 0);
+
+    this._ctxCleanup = cleanup;
+  }
+
+  _renderNodue() {
+    const cols = this._store.columns;
+    const visibleColIds = new Set(cols.slice(0, Math.max(0, cols.length - 2)).map(c => c.id));
+    const tasks = this._store.getAllTasks().filter(t => visibleColIds.has(t.columnId) && !t.dueDate);
+
+    const section = document.createElement('div');
+    section.className = 'cal-nodue';
+
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:12px;color:var(--text-2);margin-bottom:6px;';
+    hdr.textContent = `期限なし (${tasks.length}件)`;
+    section.appendChild(hdr);
+
+    const list = document.createElement('div');
+    list.className = 'cal-nodue-list';
+
+    // D&D drop zone: drop here clears dueDate
+    list.addEventListener('dragover', e => { e.preventDefault(); list.style.background = 'var(--bg)'; });
+    list.addEventListener('dragleave', () => { list.style.background = ''; });
+    list.addEventListener('drop', async e => {
+      e.preventDefault();
+      list.style.background = '';
+      const taskId = e.dataTransfer.getData('text/plain');
+      if (taskId) await this._store.updateTask(taskId, { dueDate: null });
+    });
+
+    tasks.forEach(task => list.appendChild(this._renderMiniCard(task)));
+    section.appendChild(list);
+    return section;
+  }
+
+  _navigate(delta) {
+    let { calYear: y, calMonth: m } = this._store.state;
+    m += delta;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    this._store.setCalendarNav(y, m);
+  }
+
+  _renderContribution() {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:24px;padding:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius);';
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;';
+    title.innerHTML = '<span>完了実績 (直近2週間)</span>' +
+      '<span style="display:flex;align-items:center;gap:4px;font-weight:400">少 ' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:var(--bg);border:1px solid var(--border);display:inline-block"></span>' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);display:inline-block"></span>' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.5);border:1px solid rgba(99,102,241,.6);display:inline-block"></span>' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.8);border:1px solid rgba(99,102,241,.9);display:inline-block"></span>' +
+      ' 多</span>';
+    wrap.appendChild(title);
+
+    const days = this._getLastWorkdays(10);
+    const completedTasks = this._store.getAllTasks().filter(t => t.completedAt);
+    const slots = ['朝', '昼', '夕', '夜'];
+
+    const body = document.createElement('div');
+    body.className = 'contrib-body';
+
+    // Row labels
+    const labels = document.createElement('div');
+    labels.className = 'contrib-labels';
+    slots.forEach(s => {
+      const lbl = document.createElement('div');
+      lbl.className = 'contrib-label';
+      lbl.textContent = s;
+      labels.appendChild(lbl);
+    });
+    body.appendChild(labels);
+
+    const main = document.createElement('div');
+    main.className = 'contrib-main';
+
+    // Date labels row
+    const dateRow = document.createElement('div');
+    dateRow.className = 'contrib-dates';
+    days.forEach(day => {
+      const d = document.createElement('div');
+      d.className = 'contrib-date-label';
+      d.textContent = `${day.getMonth() + 1}/${day.getDate()}`;
+      dateRow.appendChild(d);
+    });
+    main.appendChild(dateRow);
+
+    // Columns (one per day)
+    const weeksRow = document.createElement('div');
+    weeksRow.className = 'contrib-weeks';
+    days.forEach(day => {
+      const col = document.createElement('div');
+      col.className = 'contrib-col';
+      slots.forEach((_, slotIdx) => {
+        const count = this._countInSlot(completedTasks, day, slotIdx);
+        const cell = document.createElement('div');
+        cell.className = 'contrib-cell' + (count >= 4 ? ' lv3' : count >= 2 ? ' lv2' : count >= 1 ? ' lv1' : '');
+        cell.title = `${day.getMonth() + 1}/${day.getDate()} ${slots[slotIdx]}: ${count}件`;
+        col.appendChild(cell);
+      });
+      weeksRow.appendChild(col);
+    });
+    main.appendChild(weeksRow);
+    body.appendChild(main);
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  // Returns array of Date objects for the last n workdays (Mon-Fri)
+  // If today is a weekend, always include today as the last entry
+  _getLastWorkdays(n) {
+    const days = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayDow = today.getDay(); // 0=Sun, 6=Sat
+    const isWeekend = todayDow === 0 || todayDow === 6;
+
+    const cursor = new Date(today);
+    // Walk backwards, collect workdays
+    let collected = 0;
+    while (collected < n) {
+      const dow = cursor.getDay();
+      // Always include today even if weekend; skip other weekends
+      if (dow !== 0 && dow !== 6) {
+        days.unshift(new Date(cursor));
+        collected++;
+      } else if (cursor.getTime() === today.getTime() && isWeekend) {
+        days.unshift(new Date(cursor));
+        collected++;
+      }
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return days;
+  }
+
+  // Count tasks completed in given day + time slot
+  // slot 0=朝(5-11), 1=昼(12-17), 2=夕(18-21), 3=夜(22-4)
+  _countInSlot(tasks, day, slot) {
+    return tasks.filter(t => {
+      if (!t.completedAt) return false;
+      const d = new Date(t.completedAt);
+      const sameDay = d.getFullYear() === day.getFullYear() &&
+        d.getMonth() === day.getMonth() && d.getDate() === day.getDate();
+      // "夜" also catches tasks completed 0-4am on the *next* day
+      if (slot === 3) {
+        const prevDay = new Date(day); prevDay.setDate(prevDay.getDate() + 1);
+        const nextDaySame = d.getFullYear() === prevDay.getFullYear() &&
+          d.getMonth() === prevDay.getMonth() && d.getDate() === prevDay.getDate();
+        if (nextDaySame && d.getHours() < 5) return true;
+      }
+      if (!sameDay) return false;
+      const h = d.getHours();
+      if (slot === 0) return h >= 5 && h < 12;
+      if (slot === 1) return h >= 12 && h < 18;
+      if (slot === 2) return h >= 18 && h < 22;
+      if (slot === 3) return h >= 22;
+      return false;
+    }).length;
+  }
+
+  _esc(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+}
+
+// ─── Modal ───────────────────────────────────────────────────────────────────
+class Modal {
+  constructor(store) {
+    this._store = store;
+    this._task = null;       // null = create mode, object = edit mode
+    this._colId = null;      // target column for creation
+    this._exactDueTs = null; // set when calendar picker used
+    this._subtasks = [];
+    this._links = [];
+    this._attachments = [];
+    this._priority = 'none';
+
+    this._el = document.getElementById('task-modal');
+    this._titleEl = document.getElementById('modal-title');
+    this._descEl = document.getElementById('modal-desc');
+    this._dueEl = document.getElementById('modal-due');
+    this._dueDateDisplay = document.getElementById('modal-due-display');
+    this._dueCalBtn = document.getElementById('modal-due-cal-btn');
+    this._miniCal = document.getElementById('modal-mini-cal');
+    this._priorityGroup = document.getElementById('modal-priority-group');
+    this._linksList = document.getElementById('modal-links-list');
+    this._linkUrl = document.getElementById('modal-link-url');
+    this._linkTitle = document.getElementById('modal-link-title');
+    this._linkAdd = document.getElementById('modal-link-add');
+    this._attachGrid = document.getElementById('modal-attach-grid');
+    this._attachFile = document.getElementById('modal-attach-file');
+    this._attachBtn = document.getElementById('modal-attach-btn');
+    this._subtasksList = document.getElementById('modal-subtasks-list');
+    this._subtaskInput = document.getElementById('modal-subtask-input');
+    this._subtaskAdd = document.getElementById('modal-subtask-add');
+    this._cancelBtn = document.getElementById('modal-cancel');
+    this._submitBtn = document.getElementById('modal-submit');
+    this._heading = document.getElementById('modal-heading');
+
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    this._cancelBtn.addEventListener('click', () => this.close());
+
+    this._submitBtn.addEventListener('click', () => this._submit());
+
+    // Priority buttons (1-5 keys or click)
+    this._priorityGroup.querySelectorAll('.priority-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._setPriority(btn.dataset.p));
+    });
+
+    // Due date: TAB out of due field → auto next Friday if empty
+    this._dueEl.addEventListener('blur', () => {
+      if (!this._dueEl.value && !this._exactDueTs) {
+        this._exactDueTs = this._store._nextFriday();
+        this._updateDueDisplay();
+      }
+    });
+    this._dueEl.addEventListener('input', () => {
+      this._exactDueTs = null; // clear calendar pick if user types
+      this._updateDueDisplay();
+    });
+
+    // Calendar picker toggle
+    this._dueCalBtn.addEventListener('click', () => {
+      if (this._miniCal.style.display === 'none') {
+        this._renderMiniCal();
+        this._miniCal.style.display = '';
+      } else {
+        this._miniCal.style.display = 'none';
+      }
+    });
+
+    // Link add
+    this._linkAdd.addEventListener('click', () => this._addLink());
+    this._linkUrl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); this._addLink(); } });
+
+    // File attach
+    this._attachBtn.addEventListener('click', () => this._attachFile.click());
+    this._attachFile.addEventListener('change', () => this._handleFiles(this._attachFile.files));
+
+    // Subtask add
+    this._subtaskAdd.addEventListener('click', () => this._addSubtask());
+    this._subtaskInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); this._addSubtask(); } });
+
+    // Modal keyboard shortcuts
+    this._el.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { this.close(); return; }
+      if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); this._submit(); return; }
+      // Priority 1-5 keys (only when not in text inputs)
+      if (!['INPUT', 'TEXTAREA'].includes(e.target.tagName) && e.key >= '1' && e.key <= '5') {
+        const map = { '1': 'none', '2': 'low', '3': 'medium', '4': 'high', '5': 'urgent' };
+        this._setPriority(map[e.key]);
+      }
+    });
+
+    // Clipboard paste → image attach
+    this._el.addEventListener('paste', e => {
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      const files = [];
+      for (const item of items) {
+        if (item.type.startsWith('image/')) files.push(item.getAsFile());
+      }
+      if (files.length) this._handleFiles(files);
+    });
+
+    // Click outside modal box to close
+    this._el.addEventListener('click', e => {
+      if (e.target === this._el) this.close();
+    });
+  }
+
+  // Open modal. task=null → create, task=object → edit, colId optional, dueDate optional
+  open(task = null, colId = null, dueDate = null) {
+    this._task = task;
+    this._colId = colId || (this._store.state.focusedColumnId) || (this._store.columns[0] && this._store.columns[0].id);
+    this._exactDueTs = null;
+
+    if (task) {
+      this._heading.textContent = 'タスクを編集';
+      this._submitBtn.textContent = '更新';
+      this._titleEl.value = task.title;
+      this._descEl.value = task.description || '';
+      this._priority = task.priority || 'none';
+      this._subtasks = task.subtasks ? task.subtasks.map(s => ({ ...s })) : [];
+      this._links = task.links ? task.links.map(l => ({ ...l })) : [];
+      this._attachments = task.attachments ? task.attachments.map(a => ({ ...a })) : [];
+      if (task.dueDate) {
+        this._exactDueTs = task.dueDate;
+        const d = new Date(task.dueDate);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        this._dueEl.value = mm + dd;
+      } else {
+        this._dueEl.value = '';
+      }
+    } else {
+      this._heading.textContent = 'タスクを作成';
+      this._submitBtn.textContent = '登録';
+      this._titleEl.value = '';
+      this._descEl.value = '';
+      this._priority = 'none';
+      this._subtasks = [];
+      this._links = [];
+      this._attachments = [];
+      if (dueDate) {
+        this._exactDueTs = dueDate;
+        const d = new Date(dueDate);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        this._dueEl.value = mm + dd;
+      } else {
+        this._dueEl.value = '';
+      }
+    }
+
+    this._miniCal.style.display = 'none';
+    this._updatePriorityUI();
+    this._updateDueDisplay();
+    this._renderLinks();
+    this._renderAttachments();
+    this._renderSubtasks();
+
+    this._el.classList.remove('hidden');
+    this._titleEl.focus();
+  }
+
+  close() {
+    this._el.classList.add('hidden');
+    this._miniCal.style.display = 'none';
+    this._task = null;
+  }
+
+  async _submit() {
+    const title = this._titleEl.value.trim();
+    if (!title) { this._titleEl.focus(); return; }
+
+    const dueDate = this._resolveDue();
+
+    const data = {
+      title,
+      description: this._descEl.value.trim(),
+      priority: this._priority,
+      dueDate,
+      subtasks: this._subtasks,
+      links: this._links,
+      attachments: this._attachments,
+    };
+
+    if (this._task) {
+      await this._store.updateTask(this._task.id, data);
+    } else {
+      const colId = this._colId || (this._store.columns[0] && this._store.columns[0].id);
+      if (colId) await this._store.createTask(colId, data);
+    }
+    this.close();
+  }
+
+  _resolveDue() {
+    if (this._exactDueTs) return this._exactDueTs;
+    const raw = this._dueEl.value.trim();
+    if (!raw) return null;
+    if (/^\d{4}$/.test(raw)) {
+      const mo = parseInt(raw.slice(0, 2)) - 1;
+      const da = parseInt(raw.slice(2, 4));
+      const now = new Date();
+      let yr = now.getFullYear();
+      let d = new Date(yr, mo, da, 12, 0, 0, 0);
+      if (d < now) d = new Date(yr + 1, mo, da, 12, 0, 0, 0);
+      return d.getTime();
+    }
+    return null;
+  }
+
+  _updateDueDisplay() {
+    const ts = this._exactDueTs || this._resolveDue();
+    if (ts) {
+      const d = new Date(ts);
+      this._dueDateDisplay.textContent = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+    } else {
+      this._dueDateDisplay.textContent = '';
+    }
+  }
+
+  _setPriority(p) {
+    this._priority = p;
+    this._updatePriorityUI();
+  }
+
+  _updatePriorityUI() {
+    this._priorityGroup.querySelectorAll('.priority-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.p === this._priority);
+    });
+  }
+
+  _addLink() {
+    const url = this._linkUrl.value.trim();
+    if (!url) return;
+    if (!this._isSafeUrl(url)) { alert('URLは http / https / mailto のみ使用できます'); return; }
+    const title = this._linkTitle.value.trim() || url;
+    this._links.push({ id: crypto.randomUUID(), url, title });
+    this._linkUrl.value = '';
+    this._linkTitle.value = '';
+    this._renderLinks();
+  }
+
+  _isSafeUrl(url) {
+    try {
+      const u = new URL(url);
+      return ['http:', 'https:', 'mailto:'].includes(u.protocol);
+    } catch { return false; }
+  }
+
+  _renderLinks() {
+    this._linksList.innerHTML = '';
+    this._links.forEach((link, i) => {
+      const li = document.createElement('li');
+      li.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;font-size:13px;';
+      const a = document.createElement('a');
+      a.href = link.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = link.title;
+      a.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--border-focus);';
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--text-2);font-size:14px;padding:0 2px;';
+      del.addEventListener('click', () => { this._links.splice(i, 1); this._renderLinks(); });
+      li.append(a, del);
+      this._linksList.appendChild(li);
+    });
+  }
+
+  async _handleFiles(files) {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      if (file.size > 5 * 1024 * 1024) { alert(`${file.name} は 5MB を超えています`); continue; }
+      const dataUrl = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      this._attachments.push({ id: crypto.randomUUID(), name: file.name, dataUrl, size: file.size });
+    }
+    this._renderAttachments();
+    this._attachFile.value = '';
+  }
+
+  _renderAttachments() {
+    this._attachGrid.innerHTML = '';
+    this._attachments.forEach((att, i) => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;display:inline-block;';
+      const img = document.createElement('img');
+      img.src = att.dataUrl;
+      img.style.cssText = 'width:72px;height:72px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--border);cursor:pointer;';
+      img.title = att.name;
+      img.addEventListener('click', () => {
+        const w = window.open('', '_blank');
+        w.document.write(`<img src="${att.dataUrl}" style="max-width:100%">`);
+      });
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.style.cssText = 'position:absolute;top:-4px;right:-4px;background:var(--text);color:var(--bg-2);border:none;border-radius:50%;width:16px;height:16px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;';
+      del.addEventListener('click', () => { this._attachments.splice(i, 1); this._renderAttachments(); });
+      wrap.append(img, del);
+      this._attachGrid.appendChild(wrap);
+    });
+  }
+
+  _addSubtask() {
+    const text = this._subtaskInput.value.trim();
+    if (!text) return;
+    this._subtasks.push({ id: crypto.randomUUID(), text, done: false });
+    this._subtaskInput.value = '';
+    this._renderSubtasks();
+    this._subtaskInput.focus();
+  }
+
+  _renderSubtasks() {
+    this._subtasksList.innerHTML = '';
+    this._subtasks.forEach((st, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 0;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = st.done;
+      cb.addEventListener('change', () => { this._subtasks[i].done = cb.checked; this._renderSubtasks(); });
+      const span = document.createElement('span');
+      span.style.cssText = 'flex:1;font-size:13px;' + (st.done ? 'text-decoration:line-through;color:var(--text-2)' : '');
+      span.textContent = st.text;
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--text-2);font-size:14px;padding:0 2px;';
+      del.addEventListener('click', () => { this._subtasks.splice(i, 1); this._renderSubtasks(); });
+      row.append(cb, span, del);
+      this._subtasksList.appendChild(row);
+    });
+  }
+
+  _renderMiniCal() {
+    const now = this._exactDueTs ? new Date(this._exactDueTs) : new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    this._miniCal.innerHTML = '';
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;';
+    const prev = document.createElement('button');
+    prev.textContent = '◀'; prev.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--text-2);font-size:12px;';
+    const next = document.createElement('button');
+    next.textContent = '▶'; next.style.cssText = 'background:none;border:none;cursor:pointer;color:var(--text-2);font-size:12px;';
+    const title = document.createElement('span');
+    title.style.cssText = 'font-size:12px;font-weight:600;';
+    title.textContent = `${year}/${month + 1}`;
+    hdr.append(prev, title, next);
+    this._miniCal.appendChild(hdr);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;';
+    ['月', '火', '水', '木', '金', '土', '日'].forEach(d => {
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'text-align:center;font-size:10px;color:var(--text-2);';
+      lbl.textContent = d; grid.appendChild(lbl);
+    });
+
+    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Mon=0
+    for (let i = 0; i < firstDow; i++) grid.appendChild(document.createElement('div'));
+
+    const days = new Date(year, month + 1, 0).getDate();
+    for (let d = 1; d <= days; d++) {
+      const btn = document.createElement('button');
+      btn.textContent = d;
+      btn.style.cssText = 'border:none;background:none;cursor:pointer;font-size:11px;border-radius:3px;padding:2px;width:100%;text-align:center;';
+      const isSelected = this._exactDueTs &&
+        new Date(this._exactDueTs).getFullYear() === year &&
+        new Date(this._exactDueTs).getMonth() === month &&
+        new Date(this._exactDueTs).getDate() === d;
+      if (isSelected) btn.style.background = 'var(--border-focus)';
+      btn.addEventListener('click', () => {
+        const picked = new Date(year, month, d, 12, 0, 0, 0);
+        this._exactDueTs = picked.getTime();
+        const mm = String(month + 1).padStart(2, '0');
+        const dd = String(d).padStart(2, '0');
+        this._dueEl.value = mm + dd;
+        this._updateDueDisplay();
+        this._miniCal.style.display = 'none';
+      });
+      grid.appendChild(btn);
+    }
+    this._miniCal.appendChild(grid);
+
+    prev.addEventListener('click', () => {
+      this._exactDueTs = this._exactDueTs || new Date(year, month, 1, 12).getTime();
+      const d = new Date(this._exactDueTs);
+      d.setMonth(d.getMonth() - 1);
+      this._exactDueTs = d.getTime();
+      this._renderMiniCal();
+    });
+    next.addEventListener('click', () => {
+      this._exactDueTs = this._exactDueTs || new Date(year, month, 1, 12).getTime();
+      const d = new Date(this._exactDueTs);
+      d.setMonth(d.getMonth() + 1);
+      this._exactDueTs = d.getTime();
+      this._renderMiniCal();
+    });
+  }
+}
+
+// ─── QuickCapture ─────────────────────────────────────────────────────────────
+class QuickCapture {
+  constructor(store) {
+    this._store = store;
+    this._el = document.getElementById('quick-capture');
+    this._input = document.getElementById('qc-input');
+    this._preview = document.getElementById('qc-preview');
+    this._bindEvents();
+  }
+
+  open() {
+    this._input.value = '';
+    this._preview.textContent = '';
+    this._el.classList.remove('hidden');
+    this._input.focus();
+  }
+
+  close() {
+    this._el.classList.add('hidden');
+  }
+
+  _parse(text) {
+    const priorityMap = { 1: 'none', 2: 'low', 3: 'medium', 4: 'high', 5: 'urgent' };
+    let priority = 'none';
+    let dueDate = null;
+
+    const priorityMatch = text.match(/!([1-5])/);
+    if (priorityMatch) {
+      priority = priorityMap[parseInt(priorityMatch[1])];
+      text = text.replace(priorityMatch[0], '');
+    }
+
+    const dateMatch = text.match(/@(\d{4})/);
+    if (dateMatch) {
+      const raw = dateMatch[1];
+      const mo = parseInt(raw.slice(0, 2)) - 1;
+      const da = parseInt(raw.slice(2, 4));
+      const now = new Date();
+      let d = new Date(now.getFullYear(), mo, da, 12, 0, 0, 0);
+      if (d < now) d = new Date(now.getFullYear() + 1, mo, da, 12, 0, 0, 0);
+      dueDate = d.getTime();
+      text = text.replace(dateMatch[0], '');
+    }
+
+    const title = text.trim().replace(/\s+/g, ' ');
+    return { title, priority, dueDate };
+  }
+
+  _bindEvents() {
+    this._input.addEventListener('input', () => {
+      const { title, priority, dueDate } = this._parse(this._input.value);
+      const parts = [];
+      if (title) parts.push(title);
+      if (priority !== 'none') parts.push(`優先度:${priority}`);
+      if (dueDate) { const d = new Date(dueDate); parts.push(`期限:${d.getMonth() + 1}/${d.getDate()}`); }
+      this._preview.textContent = parts.join(' | ');
+    });
+
+    this._input.addEventListener('keydown', async e => {
+      if (e.key === 'Escape' || (e.key === 'Enter' && e.ctrlKey)) {
+        this.close(); return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const { title, priority, dueDate } = this._parse(this._input.value);
+        if (!title) return;
+        const colId = this._store.state.focusedColumnId || (this._store.columns[0] && this._store.columns[0].id);
+        if (colId) {
+          await this._store.createTask(colId, { title, priority, dueDate });
+        }
+        this.close();
+      }
+    });
+
+    // Click outside to close
+    this._el.addEventListener('click', e => { if (e.target === this._el) this.close(); });
+  }
+}
+
+// ─── CommandPalette ────────────────────────────────────────────────────────────
+class CommandPalette {
+  constructor(store, modal) {
+    this._store = store;
+    this._modal = modal;
+    this._el = document.getElementById('cmd-palette');
+    this._input = document.getElementById('cp-input');
+    this._results = document.getElementById('cp-results');
+    this._selected = 0;
+    this._matches = [];
+    this._bindEvents();
+  }
+
+  open() {
+    this._input.value = '';
+    this._selected = 0;
+    this._search('');
+    this._el.classList.remove('hidden');
+    this._input.focus();
+  }
+
+  close() {
+    this._el.classList.add('hidden');
+  }
+
+  _search(query) {
+    const q = query.toLowerCase();
+    const all = this._store.getAllTasks();
+    this._matches = q
+      ? all.filter(t => t.title.toLowerCase().includes(q))
+      : all.slice(0, 20);
+    this._selected = 0;
+    this._render();
+  }
+
+  _render() {
+    this._results.innerHTML = '';
+    const cols = this._store.columns;
+    const colMap = Object.fromEntries(cols.map(c => [c.id, c]));
+    this._matches.forEach((task, i) => {
+      const item = document.createElement('div');
+      item.className = 'cp-item' + (i === this._selected ? ' selected' : '');
+      item.style.cssText = 'padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;' + (i === this._selected ? 'background:var(--bg);' : '');
+      const prio = document.createElement('span');
+      prio.style.cssText = `width:6px;height:6px;border-radius:50%;background:var(--priority-${task.priority || 'none'});flex-shrink:0;`;
+      const title = document.createElement('span');
+      title.style.cssText = 'flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      title.textContent = task.title;
+      const meta = document.createElement('span');
+      meta.style.cssText = 'font-size:11px;color:var(--text-2);flex-shrink:0;';
+      const col = colMap[task.columnId];
+      const parts = [col ? col.name : ''];
+      if (task.dueDate) { const d = new Date(task.dueDate); parts.push(`${d.getMonth() + 1}/${d.getDate()}`); }
+      meta.textContent = parts.filter(Boolean).join(' · ');
+      item.append(prio, title, meta);
+      item.addEventListener('click', () => { this._modal.open(task); this.close(); });
+      item.addEventListener('mouseenter', () => { this._selected = i; this._render(); });
+      this._results.appendChild(item);
+    });
+  }
+
+  _bindEvents() {
+    this._input.addEventListener('input', () => this._search(this._input.value));
+    this._input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { this.close(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); this._selected = Math.min(this._selected + 1, this._matches.length - 1); this._render(); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); this._selected = Math.max(this._selected - 1, 0); this._render(); return; }
+      if (e.key === 'Enter') {
+        const task = this._matches[this._selected];
+        if (task) { this._modal.open(task); this.close(); }
+      }
+    });
+    this._el.addEventListener('click', e => { if (e.target === this._el) this.close(); });
+  }
+}
+
+// ─── DragManager ──────────────────────────────────────────────────────────────
+class DragManager {
+  constructor(store) {
+    this._store = store;
+    this._dragTaskId = null;
+    this._placeholder = null;
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    const container = document.getElementById('columns-container');
+
+    container.addEventListener('dragstart', e => {
+      const card = e.target.closest('.task-card');
+      if (!card) return;
+      this._dragTaskId = card.dataset.taskId;
+      e.dataTransfer.setData('text/plain', this._dragTaskId);
+      e.dataTransfer.effectAllowed = 'move';
+      card.style.opacity = '0.4';
+      this._placeholder = document.createElement('div');
+      this._placeholder.className = 'task-placeholder';
+      this._placeholder.style.cssText = 'height:60px;border:2px dashed var(--border-focus);border-radius:var(--radius);margin-bottom:6px;opacity:0.5;';
+    });
+
+    container.addEventListener('dragend', e => {
+      const card = e.target.closest('.task-card');
+      if (card) card.style.opacity = '';
+      if (this._placeholder && this._placeholder.parentNode) this._placeholder.parentNode.removeChild(this._placeholder);
+      this._dragTaskId = null;
+      this._placeholder = null;
+    });
+
+    container.addEventListener('dragover', e => {
+      e.preventDefault();
+      const taskList = e.target.closest('.task-list');
+      if (!taskList || !this._placeholder) return;
+      e.dataTransfer.dropEffect = 'move';
+
+      const afterEl = this._getDragAfterEl(taskList, e.clientY);
+      if (!afterEl) {
+        taskList.appendChild(this._placeholder);
+      } else {
+        taskList.insertBefore(this._placeholder, afterEl);
+      }
+    });
+
+    container.addEventListener('dragleave', e => {
+      // Only hide placeholder if leaving the list entirely
+    });
+
+    container.addEventListener('drop', async e => {
+      e.preventDefault();
+      if (!this._dragTaskId || !this._placeholder) return;
+      const taskList = e.target.closest('.task-list');
+      if (!taskList) return;
+
+      const colEl = taskList.closest('.column');
+      if (!colEl) return;
+      const toColId = colEl.dataset.colId;
+
+      // Determine index from placeholder position
+      const cards = [...taskList.querySelectorAll('.task-card')];
+      let toIndex = cards.length;
+      if (this._placeholder.nextSibling) {
+        const next = this._placeholder.nextSibling;
+        const idx = cards.findIndex(c => c === next);
+        if (idx !== -1) toIndex = idx;
+      }
+
+      await this._store.moveTask(this._dragTaskId, toColId, toIndex);
+    });
+  }
+
+  _getDragAfterEl(container, y) {
+    const cards = [...container.querySelectorAll('.task-card:not([style*="opacity: 0.4"])')];
+    return cards.reduce((closest, el) => {
+      const box = el.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > (closest.offset || -Infinity)) {
+        return { offset, el };
+      }
+      return closest;
+    }, {}).el || null;
+  }
+}
+
+// ─── KeyboardManager ──────────────────────────────────────────────────────────
+class KeyboardManager {
+  constructor(store, boardView, calendarView, modal, quickCapture, commandPalette) {
+    this._store = store;
+    this._boardView = boardView;
+    this._calendarView = calendarView;
+    this._modal = modal;
+    this._qc = quickCapture;
+    this._cp = commandPalette;
+    this._bindEvents();
+  }
+
+  _bindEvents() {
+    document.addEventListener('keydown', e => {
+      // Ignore if a modal/overlay is open
+      const modalOpen = !document.getElementById('task-modal').classList.contains('hidden');
+      const qcOpen = !document.getElementById('quick-capture').classList.contains('hidden');
+      const cpOpen = !document.getElementById('cmd-palette').classList.contains('hidden');
+      const shortcutsOpen = !document.getElementById('shortcuts-modal').classList.contains('hidden');
+      const anyOverlay = modalOpen || qcOpen || cpOpen || shortcutsOpen;
+
+      // Allow Esc always
+      if (e.key === 'Escape') {
+        if (shortcutsOpen) { document.getElementById('shortcuts-modal').classList.add('hidden'); return; }
+        if (cpOpen) { this._cp.close(); return; }
+        if (qcOpen) { this._qc.close(); return; }
+        if (modalOpen) { this._modal.close(); return; }
+        this._store.selectTask(null);
+        return;
+      }
+
+      // Ctrl+Z: undo
+      if (e.ctrlKey && e.key === 'z' && !anyOverlay) {
+        e.preventDefault();
+        this._store.undo();
+        return;
+      }
+
+      // Ctrl+K or /: command palette
+      if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !anyOverlay && !this._isTyping(e))) {
+        e.preventDefault();
+        this._cp.open();
+        return;
+      }
+
+      if (anyOverlay) return;
+
+      // Guard against typing in editable elements
+      if (this._isTyping(e)) return;
+
+      const view = this._store.state.view;
+
+      switch (e.key) {
+        case 'q': case 'Q': e.preventDefault(); this._qc.open(); break;
+        case 'n': case 'N':
+          if (view === 'kanban') { e.preventDefault(); this._modal.open(null); }
+          break;
+        case 'c': case 'C':
+          e.preventDefault();
+          this._store.createColumn(prompt('カラム名を入力:') || 'New Column');
+          break;
+        case 'v': case 'V':
+          e.preventDefault();
+          this._store.setView(view === 'kanban' ? 'calendar' : 'kanban');
+          break;
+        case '?':
+          e.preventDefault();
+          document.getElementById('shortcuts-modal').classList.toggle('hidden');
+          break;
+      }
+
+      // Calendar-specific
+      if (view === 'calendar') {
+        if (e.key === 'h' || e.key === 'H') { e.preventDefault(); this._calendarView._navigate(-1); }
+        else if (e.key === 'l' || e.key === 'L') { e.preventDefault(); this._calendarView._navigate(1); }
+      }
+
+      // Kanban-specific
+      if (view === 'kanban') {
+        const state = this._store.state;
+        const cols = this._store.columns;
+
+        if (e.key === 'Escape') {
+          this._store.selectTask(null);
+          return;
+        }
+
+        if (e.key === 'e' || e.key === 'E' || e.key === 'Enter') {
+          if (state.selectedTaskId) {
+            const task = this._store.getAllTasks().find(t => t.id === state.selectedTaskId);
+            if (task) { e.preventDefault(); this._modal.open(task); }
+          }
+          return;
+        }
+
+        if (e.key === 'd' || e.key === 'D') {
+          if (state.selectedTaskId) {
+            e.preventDefault();
+            if (confirm('タスクを削除しますか？')) this._store.deleteTask(state.selectedTaskId);
+          }
+          return;
+        }
+
+        if (e.key === 'ArrowUp' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault(); this._moveSelection(-1);
+        } else if (e.key === 'ArrowDown' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault(); this._moveSelection(1);
+        } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+          e.preventDefault(); this._moveFocusedColumn(-1);
+        } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+          e.preventDefault(); this._moveFocusedColumn(1);
+        } else if (e.key === 'ArrowLeft' && e.shiftKey) {
+          e.preventDefault(); this._moveTaskToColumn(-1);
+        } else if (e.key === 'ArrowRight' && e.shiftKey) {
+          e.preventDefault(); this._moveTaskToColumn(1);
+        } else if (e.key === 'ArrowUp' && e.shiftKey) {
+          e.preventDefault(); this._moveTaskInColumn(-1);
+        } else if (e.key === 'ArrowDown' && e.shiftKey) {
+          e.preventDefault(); this._moveTaskInColumn(1);
+        }
+      }
+    });
+  }
+
+  _isTyping(e) {
+    const tag = e.target.tagName;
+    const editable = e.target.isContentEditable;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || editable;
+  }
+
+  _moveSelection(delta) {
+    const state = this._store.state;
+    const cols = this._store.columns;
+    const focusedColId = state.focusedColumnId || (cols[0] && cols[0].id);
+    if (!focusedColId) return;
+    const tasks = this._store.getColumnTasks(focusedColId);
+    if (!tasks.length) return;
+    const curIdx = tasks.findIndex(t => t.id === state.selectedTaskId);
+    const newIdx = curIdx === -1 ? (delta > 0 ? 0 : tasks.length - 1) : Math.max(0, Math.min(tasks.length - 1, curIdx + delta));
+    this._store.selectTask(tasks[newIdx].id);
+  }
+
+  _moveFocusedColumn(delta) {
+    const cols = this._store.columns;
+    if (!cols.length) return;
+    const curIdx = cols.findIndex(c => c.id === this._store.state.focusedColumnId);
+    const newIdx = Math.max(0, Math.min(cols.length - 1, (curIdx === -1 ? 0 : curIdx) + delta));
+    this._store.focusColumn(cols[newIdx].id);
+  }
+
+  async _moveTaskToColumn(delta) {
+    const state = this._store.state;
+    if (!state.selectedTaskId) return;
+    const cols = this._store.columns;
+    const task = this._store.getAllTasks().find(t => t.id === state.selectedTaskId);
+    if (!task) return;
+    const curColIdx = cols.findIndex(c => c.id === task.columnId);
+    const newColIdx = Math.max(0, Math.min(cols.length - 1, curColIdx + delta));
+    if (newColIdx === curColIdx) return;
+    await this._store.moveTask(task.id, cols[newColIdx].id, 0);
+    this._store.focusColumn(cols[newColIdx].id);
+  }
+
+  async _moveTaskInColumn(delta) {
+    const state = this._store.state;
+    if (!state.selectedTaskId) return;
+    const task = this._store.getAllTasks().find(t => t.id === state.selectedTaskId);
+    if (!task) return;
+    const tasks = this._store.getColumnTasks(task.columnId);
+    const curIdx = tasks.findIndex(t => t.id === task.id);
+    const newIdx = Math.max(0, Math.min(tasks.length - 1, curIdx + delta));
+    if (newIdx === curIdx) return;
+    await this._store.moveTask(task.id, task.columnId, newIdx);
+  }
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+(async () => {
+  const db = new TaskDB();
+  await db.init();
+  const store = new Store(db);
+
+  const boardView = new BoardView(store);
+  const calendarView = new CalendarView(store);
+  const modal = new Modal(store);
+  const quickCapture = new QuickCapture(store);
+  const commandPalette = new CommandPalette(store, modal);
+  const dragManager = new DragManager(store);
+  const keyboardManager = new KeyboardManager(store, boardView, calendarView, modal, quickCapture, commandPalette);
+
+  // Expose modal globally so CalendarView can open it
+  window._modal = modal;
+
+  // Toolbar buttons
+  document.getElementById('btn-kanban').addEventListener('click', () => store.setView('kanban'));
+  document.getElementById('btn-calendar').addEventListener('click', () => store.setView('calendar'));
+  document.getElementById('btn-add-col').addEventListener('click', () => {
+    const name = prompt('カラム名を入力:');
+    if (name && name.trim()) store.createColumn(name.trim());
+  });
+
+  // Board title inline edit
+  const boardTitle = document.getElementById('board-title');
+  boardTitle.addEventListener('blur', () => {
+    const name = boardTitle.textContent.trim();
+    if (name && store.board) store.updateBoard(name);
+  });
+  boardTitle.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); boardTitle.blur(); }
+  });
+
+  // Export
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const data = JSON.stringify({
+      version: 1,
+      exportedAt: Date.now(),
+      boards: store.state.boards,
+      columns: store.state.columns,
+      tasks: store.state.tasks,
+    }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const today = new Date();
+    a.href = url;
+    a.download = `taskstation-backup-${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // Import
+  document.getElementById('btn-import').addEventListener('click', () => {
+    document.getElementById('import-file').click();
+  });
+  document.getElementById('import-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.boards || !data.columns || !data.tasks) throw new Error('無効なフォーマット');
+      if (!confirm('現在のデータをすべて上書きします。よろしいですか？')) return;
+      await store.importData(data);
+    } catch (err) {
+      alert('インポートに失敗しました: ' + err.message);
+    }
+    e.target.value = '';
+  });
+
+  // Help modal
+  document.getElementById('btn-help').addEventListener('click', () => {
+    document.getElementById('shortcuts-modal').classList.toggle('hidden');
+  });
+  document.getElementById('shortcuts-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('shortcuts-modal')) {
+      document.getElementById('shortcuts-modal').classList.add('hidden');
+    }
+  });
+
+  // Stats update
+  function updateStats() {
+    const all = store.getAllTasks();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const todayMs = today.getTime();
+    const completedToday = all.filter(t => t.completedAt && t.completedAt >= todayMs).length;
+    document.getElementById('stats').textContent = `今日${completedToday} / 全${all.length}`;
+    if (store.board) boardTitle.textContent = store.board.name;
+  }
+
+  // View switching
+  function applyView(view) {
+    const kanbanCont = document.getElementById('columns-container');
+    const calCont = document.getElementById('calendar-container');
+    const btnK = document.getElementById('btn-kanban');
+    const btnC = document.getElementById('btn-calendar');
+    if (view === 'calendar') {
+      kanbanCont.hidden = true; calCont.hidden = false;
+      btnK.classList.remove('active'); btnC.classList.add('active');
+      calendarView.render();
+    } else {
+      kanbanCont.hidden = false; calCont.hidden = true;
+      btnK.classList.add('active'); btnC.classList.remove('active');
+      boardView.render();
+    }
+    updateStats();
+  }
+
+  // Event listeners
+  store.on('loaded', () => applyView(store.state.view));
+  store.on('changed', () => {
+    applyView(store.state.view);
+  });
+  store.on('viewChanged', view => applyView(view));
+  store.on('calNavChanged', () => { if (store.state.view === 'calendar') calendarView.render(); });
+  store.on('selectionChanged', taskId => {
+    document.querySelectorAll('.task-card').forEach(el => {
+      el.classList.toggle('selected', el.dataset.taskId === taskId);
+    });
+  });
+  store.on('focusChanged', colId => {
+    document.querySelectorAll('.column').forEach(el => {
+      el.classList.toggle('focused', el.dataset.colId === colId);
+    });
+  });
+
+  await store.loadAll();
+})();
+
+</script>
+</body>
+</html>
