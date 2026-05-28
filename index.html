@@ -233,9 +233,9 @@ a:hover{text-decoration:underline}
   width:20px;height:20px;border-radius:3px;border:1px solid var(--border);
   background:var(--bg);
 }
-.contrib-cell.lv1{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.3)}
-.contrib-cell.lv2{background:rgba(99,102,241,.5);border-color:rgba(99,102,241,.6)}
-.contrib-cell.lv3{background:rgba(99,102,241,.8);border-color:rgba(99,102,241,.9)}
+.contrib-cell.lv1{background:rgba(99,102,241,.45);border-color:rgba(99,102,241,.6)}
+.contrib-cell.lv2{background:rgba(99,102,241,.7);border-color:rgba(99,102,241,.85)}
+.contrib-cell.lv3{background:rgba(99,102,241,.95);border-color:rgba(99,102,241,1)}
 
 /* Modal */
 .modal{
@@ -1445,9 +1445,9 @@ class CalendarView {
     title.innerHTML = '<span>完了実績 (直近2週間)</span>' +
       '<span style="display:flex;align-items:center;gap:4px;font-weight:400">少 ' +
       '<span style="width:14px;height:14px;border-radius:2px;background:var(--bg);border:1px solid var(--border);display:inline-block"></span>' +
-      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);display:inline-block"></span>' +
-      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.5);border:1px solid rgba(99,102,241,.6);display:inline-block"></span>' +
-      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.8);border:1px solid rgba(99,102,241,.9);display:inline-block"></span>' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.45);border:1px solid rgba(99,102,241,.6);display:inline-block"></span>' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.7);border:1px solid rgba(99,102,241,.85);display:inline-block"></span>' +
+      '<span style="width:14px;height:14px;border-radius:2px;background:rgba(99,102,241,.95);border:1px solid rgba(99,102,241,1);display:inline-block"></span>' +
       ' 多</span>';
     wrap.appendChild(title);
 
@@ -2512,6 +2512,20 @@ class KeyboardManager {
       el.classList.toggle('focused', el.dataset.colId === colId);
     });
   });
+
+  // Re-render Done column filter at midnight without requiring user interaction
+  function scheduleMidnightRefresh() {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    setTimeout(() => {
+      if (store.state.view === 'kanban') boardView.render();
+      else calendarView.render();
+      scheduleMidnightRefresh();
+    }, tomorrow.getTime() - now.getTime());
+  }
+  scheduleMidnightRefresh();
 
   await store.loadAll();
 })();
