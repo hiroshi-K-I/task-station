@@ -93,6 +93,8 @@ a:hover{text-decoration:underline}
   background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-lg);
   display:flex;flex-direction:column;max-height:100%;
 }
+.column.focused{border-color:var(--border-focus);box-shadow:0 0 0 2px rgba(99,102,241,.15)}
+.task-card:focus{outline:none;border-color:var(--border-focus);box-shadow:0 0 0 2px rgba(99,102,241,.35)}
 .col-header{
   display:flex;align-items:center;gap:6px;padding:8px 10px;
   border-bottom:1px solid var(--border);flex-shrink:0;
@@ -224,11 +226,11 @@ a:hover{text-decoration:underline}
 .contrib-labels{display:flex;flex-direction:column;gap:3px;padding-top:20px}
 .contrib-label{font-size:10px;color:var(--text-2);height:20px;width:24px;display:flex;align-items:center}
 .contrib-main{flex:1}
-.contrib-dates{display:flex;gap:4px;margin-bottom:3px}
-.contrib-date-label{flex:1;font-size:10px;color:var(--text-3);text-align:center}
+.contrib-dates{display:flex;gap:8px;margin-bottom:3px}
+.contrib-date-label{width:20px;font-size:10px;color:var(--text-3);text-align:center;flex-shrink:0}
 .contrib-weeks{display:flex;gap:8px}
 .contrib-week{display:flex;gap:4px}
-.contrib-col{display:flex;flex-direction:column;gap:3px}
+.contrib-col{display:flex;flex-direction:column;gap:3px;width:20px;flex-shrink:0}
 .contrib-cell{
   width:20px;height:20px;border-radius:3px;border:1px solid var(--border);
   background:var(--bg);
@@ -905,6 +907,7 @@ class BoardView {
     // Save scroll positions
     const scrolls = {};
     container.querySelectorAll('.task-list').forEach(el => { scrolls[el.dataset.colId] = el.scrollTop; });
+    const hadFocus = container.contains(document.activeElement);
 
     container.innerHTML = '';
     const todayMid = new Date(); todayMid.setHours(0,0,0,0); const todayMs = todayMid.getTime();
@@ -916,6 +919,16 @@ class BoardView {
     container.querySelectorAll('.task-list').forEach(el => {
       if (scrolls[el.dataset.colId] !== undefined) el.scrollTop = scrolls[el.dataset.colId];
     });
+    // Restore keyboard focus to selected task if board had focus
+    if (hadFocus) this.focusSelected();
+  }
+  focusSelected() {
+    const sel = this._store.state.selectedTaskId;
+    if (sel && /^[\w-]+$/.test(sel)) {
+      const card = this._container.querySelector(`.task-card[data-task-id="${sel}"]`);
+      if (card) { card.focus({ preventScroll: true }); card.scrollIntoView({ block: 'nearest' }); return true; }
+    }
+    return false;
   }
   _renderColumn(col, allCols, todayMs) {
     const store = this._store;
@@ -929,9 +942,8 @@ class BoardView {
     const isFocused = store.state.focusedColumnId === col.id;
 
     const colEl = document.createElement('div');
-    colEl.className = 'column';
+    colEl.className = 'column' + (isFocused ? ' focused' : '');
     colEl.dataset.colId = col.id;
-    if (isFocused) colEl.style.outline = '2px solid var(--border-focus)';
 
     // Header
     const validColor = /^#[0-9a-fA-F]{3,8}$/.test(col.color) ? col.color : '#6366f1';
@@ -1118,12 +1130,54 @@ class CalendarView {
 
   render() {
     const { calYear: year, calMonth: month } = this._store.state;
+    // Remember focus to restore after re-render
+    const ae = document.activeElement;
+    let restoreTaskId = null, restoreCellDate = null;
+    if (ae && this._container.contains(ae)) {
+      if (ae.classList.contains('cal-mini-card')) restoreTaskId = ae.dataset.taskId;
+      else if (ae.classList.contains('cal-cell')) restoreCellDate = ae.dataset.date;
+    }
+
     this._container.innerHTML = '';
     this._container.appendChild(this._renderHeader(year, month));
     this._container.appendChild(this._renderDayLabels());
     this._container.appendChild(this._renderGrid(year, month));
     this._container.appendChild(this._renderNodue());
     this._container.appendChild(this._renderContribution());
+
+    // Ensure exactly one cell is Tab-reachable (roving tabindex)
+    this._ensureRovingTabindex();
+
+    // Restore focus
+    if (restoreTaskId && /^[\w-]+$/.test(restoreTaskId)) {
+      const card = this._container.querySelector(`.cal-mini-card[data-task-id="${restoreTaskId}"]`);
+      if (card) { card.focus({ preventScroll: true }); card.scrollIntoView({ block: 'nearest' }); return; }
+    }
+    if (restoreCellDate && /^\d{4}-\d{1,2}-\d{1,2}$/.test(restoreCellDate)) {
+      const cell = this._container.querySelector(`.cal-cell[data-date="${restoreCellDate}"]`);
+      if (cell) { cell.setAttribute('tabindex', '0'); cell.focus({ preventScroll: true }); }
+    }
+  }
+
+  // Make the today cell (or first weekday cell) Tab-reachable; others -1.
+  _ensureRovingTabindex() {
+    const cells = this._container.querySelectorAll('.cal-cell');
+    if (!cells.length) return;
+    const today = this._container.querySelector('.cal-cell.today');
+    const target = today || cells[0];
+    cells.forEach(c => c.setAttribute('tabindex', '-1'));
+    target.setAttribute('tabindex', '0');
+  }
+
+  focusFirstCell() {
+    const target = this._container.querySelector('.cal-cell.today') || this._container.querySelector('.cal-cell');
+    if (target) {
+      this._container.querySelectorAll('.cal-cell').forEach(c => c.setAttribute('tabindex', '-1'));
+      target.setAttribute('tabindex', '0');
+      target.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
   }
 
   _renderHeader(year, month) {
@@ -1266,18 +1320,75 @@ class CalendarView {
       }
     });
 
-    // N key on cell: create task for that date
     cell.setAttribute('tabindex', '-1');
     cell.addEventListener('keydown', e => {
+      // Only handle if the cell itself is the target (not a child card)
+      if (e.target !== cell) return;
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+
+      // N: create task for that date
       if (e.key === 'n' || e.key === 'N') {
-        if (e.ctrlKey || e.altKey || e.metaKey) return;
         e.preventDefault();
         const noon = new Date(date); noon.setHours(12, 0, 0, 0);
         window._modal && window._modal.open(null, null, noon.getTime());
+        return;
+      }
+      // Enter: focus first card if present, else open new-task modal
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const firstCard = cell.querySelector('.cal-mini-card');
+        if (firstCard) firstCard.focus();
+        else {
+          const noon = new Date(date); noon.setHours(12, 0, 0, 0);
+          window._modal && window._modal.open(null, null, noon.getTime());
+        }
+        return;
+      }
+      // Arrow keys: navigate between cells
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        this._navCellByArrow(date, e.key);
       }
     });
 
     return cell;
+  }
+
+  // Navigate cell focus to adjacent workday cell; flips month if needed.
+  _navCellByArrow(fromDate, key) {
+    const d = new Date(fromDate);
+    if (key === 'ArrowRight') { d.setDate(d.getDate() + 1); this._skipToWorkday(d, true); }
+    else if (key === 'ArrowLeft') { d.setDate(d.getDate() - 1); this._skipToWorkday(d, false); }
+    else if (key === 'ArrowDown') {
+      d.setDate(d.getDate() + 7);
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) this._skipToWorkday(d, true);
+    }
+    else if (key === 'ArrowUp') {
+      d.setDate(d.getDate() - 7);
+      const dow = d.getDay();
+      if (dow === 0 || dow === 6) this._skipToWorkday(d, false);
+    }
+    const state = this._store.state;
+    const ty = d.getFullYear(), tm = d.getMonth() + 1;
+    if (ty !== state.calYear || tm !== state.calMonth) {
+      // setCalendarNav triggers a render; queue focus restore on next frame
+      this._pendingFocusCellDate = `${ty}-${tm}-${d.getDate()}`;
+      this._store.setCalendarNav(ty, tm);
+      requestAnimationFrame(() => this._focusCellByDateString(this._pendingFocusCellDate));
+    } else {
+      this._focusCellByDateString(`${ty}-${tm}-${d.getDate()}`);
+    }
+  }
+
+  _focusCellByDateString(key) {
+    if (!key || !/^\d{4}-\d{1,2}-\d{1,2}$/.test(key)) return false;
+    const cell = this._container.querySelector(`.cal-cell[data-date="${key}"]`);
+    if (!cell) return false;
+    this._container.querySelectorAll('.cal-cell').forEach(c => c.setAttribute('tabindex', '-1'));
+    cell.setAttribute('tabindex', '0');
+    cell.focus({ preventScroll: true });
+    return true;
   }
 
   _renderMiniCard(task) {
@@ -2506,6 +2617,14 @@ class KeyboardManager {
     document.querySelectorAll('.task-card').forEach(el => {
       el.classList.toggle('selected', el.dataset.taskId === taskId);
     });
+    // Move DOM focus to the selected card so keyboard nav stays in sync
+    if (taskId && /^[\w-]+$/.test(taskId) && store.state.view === 'kanban') {
+      const card = document.querySelector(`#columns-container .task-card[data-task-id="${taskId}"]`);
+      if (card && document.activeElement !== card) {
+        card.focus({ preventScroll: true });
+        card.scrollIntoView({ block: 'nearest' });
+      }
+    }
   });
   store.on('focusChanged', colId => {
     document.querySelectorAll('.column').forEach(el => {
