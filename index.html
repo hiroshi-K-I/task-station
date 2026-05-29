@@ -77,7 +77,12 @@ a:hover{text-decoration:underline}
 }
 .tb-btn:hover{background:var(--bg);border-color:var(--border-focus)}
 .tb-btn.active{background:var(--border-focus);color:#fff;border-color:var(--border-focus)}
-#stats{font-size:12px;color:var(--text-2);white-space:nowrap}
+#stats{font-size:12px;color:var(--text-2);white-space:nowrap;display:flex;gap:10px;align-items:center}
+.stat-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:var(--bg);border:1px solid var(--border)}
+.stat-badge.done{color:#059669;border-color:rgba(5,150,105,.3);background:rgba(5,150,105,.08)}
+.stat-badge.overdue{color:#dc2626;border-color:rgba(220,38,38,.3);background:rgba(220,38,38,.08)}
+.stat-badge.today{color:#d97706;border-color:rgba(217,119,6,.3);background:rgba(217,119,6,.08)}
+.stat-badge.muted{color:var(--text-3)}
 .tb-spacer{flex:1}
 
 /* Main */
@@ -1601,10 +1606,16 @@ class CalendarView {
       const col = document.createElement('div');
       col.className = 'contrib-col';
       slots.forEach((_, slotIdx) => {
-        const count = this._countInSlot(completedTasks, day, slotIdx);
+        const slotTasks = completedTasks.filter(t => this._matchesSlot(new Date(t.completedAt), day, slotIdx));
+        const count = slotTasks.length;
         const cell = document.createElement('div');
         cell.className = 'contrib-cell' + (count >= 4 ? ' lv3' : count >= 2 ? ' lv2' : count >= 1 ? ' lv1' : '');
-        cell.title = `${day.getMonth() + 1}/${day.getDate()} ${slots[slotIdx]}: ${count}件`;
+        cell.title = `${day.getMonth() + 1}/${day.getDate()} ${slots[slotIdx]}: ${count}件 (クリックで詳細)`;
+        cell.style.cursor = 'pointer';
+        cell.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._showHeatmapPopover(cell, day, slots[slotIdx], slotTasks);
+        });
         col.appendChild(cell);
       });
       weeksRow.appendChild(col);
@@ -1613,6 +1624,68 @@ class CalendarView {
     body.appendChild(main);
     wrap.appendChild(body);
     return wrap;
+  }
+
+  _showHeatmapPopover(anchorEl, day, slotName, tasks) {
+    document.querySelectorAll('.heatmap-popover').forEach(p => p.remove());
+
+    const popup = document.createElement('div');
+    popup.className = 'heatmap-popover';
+    popup.style.cssText = 'position:fixed;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow-lg);min-width:220px;max-width:320px;z-index:300;font-size:12px;';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'font-weight:600;color:var(--text-1);margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border);';
+    header.textContent = `${day.getMonth() + 1}/${day.getDate()} ${slotName} (${tasks.length}件完了)`;
+    popup.appendChild(header);
+
+    if (tasks.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--text-3);padding:4px 0;';
+      empty.textContent = '完了タスクなし';
+      popup.appendChild(empty);
+    } else {
+      const list = document.createElement('div');
+      list.style.cssText = 'max-height:240px;overflow-y:auto;';
+      tasks.sort((a, b) => a.completedAt - b.completedAt).forEach(t => {
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:4px 0;display:flex;align-items:baseline;gap:6px;';
+        const time = new Date(t.completedAt);
+        const hh = String(time.getHours()).padStart(2, '0');
+        const mm = String(time.getMinutes()).padStart(2, '0');
+        const timeEl = document.createElement('span');
+        timeEl.style.cssText = 'font-variant-numeric:tabular-nums;color:var(--text-3);flex-shrink:0;';
+        timeEl.textContent = `${hh}:${mm}`;
+        const titleEl = document.createElement('span');
+        titleEl.style.cssText = 'color:var(--text-1);';
+        titleEl.textContent = '✓ ' + t.title;
+        row.append(timeEl, titleEl);
+        list.appendChild(row);
+      });
+      popup.appendChild(list);
+    }
+
+    document.body.appendChild(popup);
+    const a = anchorEl.getBoundingClientRect();
+    let left = a.left;
+    let top = a.bottom + 6;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    const r = popup.getBoundingClientRect();
+    if (r.right > window.innerWidth - 8) popup.style.left = (window.innerWidth - r.width - 8) + 'px';
+    if (r.bottom > window.innerHeight - 8) popup.style.top = (a.top - r.height - 6) + 'px';
+
+    const dismiss = (e) => {
+      if (e.type === 'keydown') {
+        if (e.key !== 'Escape') return;
+      } else if (popup.contains(e.target) || anchorEl.contains(e.target)) return;
+      popup.remove();
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', dismiss);
+    };
+    setTimeout(() => {
+      document.addEventListener('mousedown', dismiss);
+      document.addEventListener('keydown', dismiss);
+    }, 0);
   }
 
   // Returns array of Date objects for the last n workdays (Mon-Fri)
@@ -1642,29 +1715,24 @@ class CalendarView {
     return days;
   }
 
-  // Count tasks completed in given day + time slot
-  // slot 0=朝(5-11), 1=昼(12-17), 2=夕(18-21), 3=夜(22-4)
-  _countInSlot(tasks, day, slot) {
-    return tasks.filter(t => {
-      if (!t.completedAt) return false;
-      const d = new Date(t.completedAt);
-      const sameDay = d.getFullYear() === day.getFullYear() &&
-        d.getMonth() === day.getMonth() && d.getDate() === day.getDate();
-      // "夜" also catches tasks completed 0-4am on the *next* day
-      if (slot === 3) {
-        const prevDay = new Date(day); prevDay.setDate(prevDay.getDate() + 1);
-        const nextDaySame = d.getFullYear() === prevDay.getFullYear() &&
-          d.getMonth() === prevDay.getMonth() && d.getDate() === prevDay.getDate();
-        if (nextDaySame && d.getHours() < 5) return true;
-      }
-      if (!sameDay) return false;
-      const h = d.getHours();
-      if (slot === 0) return h >= 5 && h < 12;
-      if (slot === 1) return h >= 12 && h < 18;
-      if (slot === 2) return h >= 18 && h < 22;
-      if (slot === 3) return h >= 22;
-      return false;
-    }).length;
+  // True if Date d (completion time) falls in given day+slot
+  // slot 0=朝(5-11), 1=昼(12-17), 2=夕(18-21), 3=夜(22-4 next day)
+  _matchesSlot(d, day, slot) {
+    if (slot === 3) {
+      const nextDay = new Date(day); nextDay.setDate(nextDay.getDate() + 1);
+      if (d.getFullYear() === nextDay.getFullYear() &&
+          d.getMonth() === nextDay.getMonth() &&
+          d.getDate() === nextDay.getDate() && d.getHours() < 5) return true;
+    }
+    const sameDay = d.getFullYear() === day.getFullYear() &&
+      d.getMonth() === day.getMonth() && d.getDate() === day.getDate();
+    if (!sameDay) return false;
+    const h = d.getHours();
+    if (slot === 0) return h >= 5 && h < 12;
+    if (slot === 1) return h >= 12 && h < 18;
+    if (slot === 2) return h >= 18 && h < 22;
+    if (slot === 3) return h >= 22;
+    return false;
   }
 
   _esc(str) {
@@ -2088,9 +2156,10 @@ class QuickCapture {
     this._bindEvents();
   }
 
-  open() {
+  open(defaultDueDate = null) {
     this._input.value = '';
-    this._preview.textContent = '';
+    this._defaultDueDate = defaultDueDate;
+    this._input.dispatchEvent(new Event('input'));
     this._el.classList.remove('hidden');
     this._input.focus();
   }
@@ -2103,6 +2172,7 @@ class QuickCapture {
     const priorityMap = { 1: 'none', 2: 'low', 3: 'medium', 4: 'high', 5: 'urgent' };
     let priority = 'none';
     let dueDate = null;
+    let dueInherited = false;
 
     const priorityMatch = text.match(/!([1-5])/);
     if (priorityMatch) {
@@ -2120,19 +2190,25 @@ class QuickCapture {
       if (d < now) d = new Date(now.getFullYear() + 1, mo, da, 12, 0, 0, 0);
       dueDate = d.getTime();
       text = text.replace(dateMatch[0], '');
+    } else if (this._defaultDueDate) {
+      dueDate = this._defaultDueDate;
+      dueInherited = true;
     }
 
     const title = text.trim().replace(/\s+/g, ' ');
-    return { title, priority, dueDate };
+    return { title, priority, dueDate, dueInherited };
   }
 
   _bindEvents() {
     this._input.addEventListener('input', () => {
-      const { title, priority, dueDate } = this._parse(this._input.value);
+      const { title, priority, dueDate, dueInherited } = this._parse(this._input.value);
       const parts = [];
       if (title) parts.push(title);
       if (priority !== 'none') parts.push(`優先度:${priority}`);
-      if (dueDate) { const d = new Date(dueDate); parts.push(`期限:${d.getMonth() + 1}/${d.getDate()}`); }
+      if (dueDate) {
+        const d = new Date(dueDate);
+        parts.push(`期限:${d.getMonth() + 1}/${d.getDate()}${dueInherited ? ' (継承)' : ''}`);
+      }
       this._preview.textContent = parts.join(' | ');
     });
 
@@ -2372,7 +2448,10 @@ class KeyboardManager {
       const view = this._store.state.view;
 
       switch (e.key) {
-        case 'q': case 'Q': e.preventDefault(); this._qc.open(); break;
+        case 'q': case 'Q':
+          e.preventDefault();
+          this._qc.open(this._focusedCellDueDate());
+          break;
         case 'n': case 'N':
           if (view === 'kanban') { e.preventDefault(); this._modal.open(null); }
           break;
@@ -2447,6 +2526,16 @@ class KeyboardManager {
     const tag = e.target.tagName;
     const editable = e.target.isContentEditable;
     return tag === 'INPUT' || tag === 'TEXTAREA' || editable;
+  }
+
+  // If calendar view has a focused cell, return that cell's noon timestamp.
+  _focusedCellDueDate() {
+    if (this._store.state.view !== 'calendar') return null;
+    const ae = document.activeElement;
+    if (!ae || !ae.classList || !ae.classList.contains('cal-cell')) return null;
+    const m = ae.dataset.date && ae.dataset.date.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!m) return null;
+    return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]), 12, 0, 0, 0).getTime();
   }
 
   _moveSelection(delta) {
@@ -2583,8 +2672,29 @@ class KeyboardManager {
     const all = store.getAllTasks();
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayMs = today.getTime();
+    const tomorrowMs = todayMs + 86400000;
+    // Open = not completed (and not in last/Done column for safety)
+    const cols = store.columns;
+    const doneColId = cols.length ? cols[cols.length - 1].id : null;
+    const open = all.filter(t => !t.completedAt && t.columnId !== doneColId);
     const completedToday = all.filter(t => t.completedAt && t.completedAt >= todayMs).length;
-    document.getElementById('stats').textContent = `今日${completedToday} / 全${all.length}`;
+    const overdue = open.filter(t => t.dueDate && t.dueDate < todayMs).length;
+    const dueToday = open.filter(t => t.dueDate && t.dueDate >= todayMs && t.dueDate < tomorrowMs).length;
+
+    const el = document.getElementById('stats');
+    el.innerHTML = '';
+    const mk = (cls, text, title) => {
+      const b = document.createElement('span');
+      b.className = 'stat-badge ' + cls;
+      b.textContent = text;
+      b.title = title;
+      return b;
+    };
+    el.append(
+      mk(completedToday > 0 ? 'done' : 'muted', `✓ ${completedToday}`, '今日完了したタスク数'),
+      mk(overdue > 0 ? 'overdue' : 'muted', `⚠ ${overdue}`, '期限切れの未完了タスク数'),
+      mk(dueToday > 0 ? 'today' : 'muted', `◎ ${dueToday}`, '今日が期限の未完了タスク数'),
+    );
     if (store.board) boardTitle.textContent = store.board.name;
   }
 
