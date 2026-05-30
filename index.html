@@ -998,7 +998,7 @@ class BoardView {
     addBtn.innerHTML = '+ タスクを追加';
     addBtn.addEventListener('click', () => {
       store.focusColumn(col.id);
-      window.modal.openCreate(col.id);
+      window._modal.open(null, col.id);
     });
     colEl.appendChild(addBtn);
 
@@ -1042,9 +1042,9 @@ class BoardView {
       store.selectTask(task.id);
       store.focusColumn(task.columnId);
     });
-    card.addEventListener('dblclick', () => { window.modal.openEdit(task.id); });
+    card.addEventListener('dblclick', () => { window._modal.open(task); });
     card.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { window.modal.openEdit(task.id); }
+      if (e.key === 'Enter') { window._modal.open(task); }
     });
     return card;
   }
